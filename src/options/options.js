@@ -9,7 +9,7 @@ import {
   setWordKnown,
 } from '../shared/settings.js';
 import { VOCAB_STOPS, formatNumber, nearestStopIndex } from '../shared/text.js';
-import { fetchAccountVocab, fetchMe, getAuth, login, logout } from '../shared/api.js';
+import { fetchAccountVocab, fetchMe, getAuth, login, logout, warmUp } from '../shared/api.js';
 import { captureSelection } from '../capture.js';
 import { mountReader, showHint } from '../overlay.js';
 import { readerUrl, storeDoc } from '../shared/docs.js';
@@ -273,6 +273,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function main() {
+  // 装好后第一件事就是在这页试用：先把游客 token 拿好
+  warmUp().catch(() => {});
   settings = await loadSettings();
   buildPresets();
   renderVocab();

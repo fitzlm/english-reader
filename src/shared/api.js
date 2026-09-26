@@ -87,10 +87,40 @@ function refreshGuest(base) {
   return guestPromise;
 }
 
+/** JWT 的过期时间（毫秒）；解不出来返回 0，按「不知道」处理。只读 payload，不做校验。 */
+export function tokenExpiry(token) {
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const { exp } = JSON.parse(atob(payload.padEnd(payload.length + ((4 - (payload.length % 4)) % 4), '=')));
+    return typeof exp === 'number' ? exp * 1000 : 0;
+  } catch (err) {
+    return 0;
+  }
+}
+
+/** 离过期不到 30 秒就当已过期：省掉一次必然 401 的往返。 */
+function isExpired(token) {
+  const exp = tokenExpiry(token);
+  return exp > 0 && exp - Date.now() < 30000;
+}
+
+/** 预热：还没有任何 token 时先拿一个游客 token（欢迎页打开时调用，首次试用少一次往返）。 */
+export async function warmUp() {
+  const auth = await getAuth();
+  if (auth && !isExpired(auth.token)) return;
+  await refreshGuest(await getApiBase());
+}
+
 /** 带鉴权的请求：没有 token 先拿游客 token，401 续期后重试一次。 */
 export async function request(path, { method = 'GET', body } = {}) {
   const base = await getApiBase();
-  let auth = (await getAuth()) || (await refreshGuest(base));
+  let auth = await getAuth();
+  if (auth && isExpired(auth.token)) {
+    // 游客 token 只有 15 分钟：到期前直接续，不去撞 401；账号 token 过期则退回游客并提示重新登录
+    if (auth.kind === 'user') await chrome.storage.local.set({ auth: null, sessionExpired: true });
+    auth = null;
+  }
+  if (!auth) auth = await refreshGuest(base);
   let res = await rawFetch(`${base}${path}`, { method, body, token: auth.token });
   if (res.status === 401) {
     if (auth.kind === 'user') await chrome.storage.local.set({ auth: null, sessionExpired: true });

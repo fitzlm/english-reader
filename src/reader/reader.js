@@ -382,19 +382,22 @@ async function main() {
   document.body.classList.toggle('lookup-mode', words > 0 && words <= 3);
   dom.meta.textContent = words >= 40 ? `约 ${readingMinutes(words)} 分钟 · ${formatNumber(words)} 词` : '';
 
-  // 字体就绪再淡入，避免淡入过程中字体闪一下；最多等 400ms
-  await Promise.race([document.fonts.ready, new Promise((resolve) => setTimeout(resolve, 400))]);
-  updateLayout();
-  signalReady();
-
+  // 生词请求与字体加载并行：先扫词、发请求，再等字体
   glossary = new Glossary(
     { article: dom.article, notes: dom.notes, list: dom.list, page: dom.page, pop: dom.pop },
     { vocab: settings.vocab, known: await loadKnownWords(), contextGloss: settings.contextGloss, onStatus: onGlossaryStatus },
   );
   glossary.scan();
   dom.article.classList.add('reveal');
+  const loading = glossary.load();
+
+  // 字体就绪再淡入，避免淡入过程中字体闪一下；最多等 400ms
+  await Promise.race([document.fonts.ready, new Promise((resolve) => setTimeout(resolve, 400))]);
   updateLayout();
-  await glossary.load();
+  signalReady();
+  document.fonts.ready.then(() => glossary.layoutNotes());
+
+  await loading;
   updateLayout();
   // 只选了一两个词：多半是想查词，直接把释义卡片弹出来
   if (words > 0 && words <= 3) glossary.openFirstCard();
