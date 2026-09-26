@@ -24,6 +24,8 @@ import {
 const MIN_MARKABLE = 1000;
 const MAX_MACHINE_WORDS = 80;
 const MAX_CONTEXT_ITEMS = 40;
+/** 每篇最多问几批语境义（每批消耗 1 次 AI 次数）：先问开头 40 个，读到后面再补。 */
+const MAX_CONTEXT_BATCHES = 3;
 const NOTE_GAP = 7;
 /** 旁注不上探到顶栏区域（版心顶部留白 104px）。 */
 const NOTES_MIN_TOP = 96;
@@ -141,6 +143,8 @@ export class Glossary {
     this.frame = 0;
     this.ctxTimer = 0;
     this.ctxBlocked = false;
+    this.ctxBatches = 0;
+    this.ctxLoading = false;
     this.bindEvents();
   }
 
@@ -339,9 +343,9 @@ export class Glossary {
     return sentenceAt(block.textContent || '', offset);
   }
 
-  /** 当前标出的生词里还没问过语境的，一次打包问（最多 40 个，按出现顺序）。 */
+  /** 当前标出的生词里还没问过语境的，按出现顺序打包问一批（最多 40 个）。 */
   async loadContextGlosses() {
-    if (!this.contextGloss || this.ctxBlocked) return;
+    if (!this.contextGloss || this.ctxBlocked || this.ctxLoading || this.ctxBatches >= MAX_CONTEXT_BATCHES) return;
     const pending = this.rareGroups.filter((g) => !g.ctx && !g.ctxTried).slice(0, MAX_CONTEXT_ITEMS);
     if (!pending.length) return;
     const items = [];
@@ -354,6 +358,9 @@ export class Glossary {
       if (sentence && sentence.toLowerCase().includes(word.toLowerCase())) items.push({ key: group.key, word, sentence });
     }
     if (!items.length) return;
+    this.ctxBatches += 1;
+    this.ctxLoading = true;
+    this.onStatus({ ctxLoading: true });
     try {
       const glosses = await fetchContextGlosses(items);
       let changed = false;
@@ -371,7 +378,19 @@ export class Glossary {
         this.ctxBlocked = true;
         this.onStatus({ ctxNotice: '今天的语境释义次数已用完，已改用词典释义。' });
       }
+    } finally {
+      this.ctxLoading = false;
+      this.onStatus({ ctxLoading: false });
     }
+  }
+
+  /** 读到后面：还没有语境义的生词进入视野前两屏时，补问下一批。 */
+  maybeLoadMoreContext() {
+    if (!this.contextGloss || this.ctxBlocked || this.ctxLoading || this.ctxBatches === 0) return;
+    if (this.ctxBatches >= MAX_CONTEXT_BATCHES) return;
+    const next = this.rareGroups.find((g) => !g.ctx && !g.ctxTried);
+    const span = next && this.firstSpan(next);
+    if (span && span.getBoundingClientRect().top < window.innerHeight * 2) this.loadContextGlosses();
   }
 
   // ---------- 标记 ----------
@@ -514,7 +533,8 @@ export class Glossary {
       const gloss = this.noteGloss(group);
       const current = existing.get(group.key);
       if (current && current.dataset.gloss === gloss) continue;
-      const note = el('div', current ? 'note' : 'note entering');
+      // 新出现的、换了释义的旁注都从透明淡入，不要生硬地跳字
+      const note = el('div', 'note entering');
       note.dataset.k = group.key;
       note.dataset.gloss = gloss;
       note.append(el('b', null, group.word));

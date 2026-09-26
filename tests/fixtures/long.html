@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>A Very Long Essay</title></head>
+  <body>
+    <article id="story"></article>
+    <script>
+      // 60 段、每段约 130 词，一共 120 个合成生词（zqaa、zqab … 纯字母编号），每段 2 个
+      const tag = (i) => 'zq' + String.fromCharCode(97 + Math.floor(i / 26)) + String.fromCharCode(97 + (i % 26));
+      const common = 'the people of the city walk along the river every morning and talk about the weather while children play near the old bridge'.split(' ');
+      const story = document.getElementById('story');
+      const h = document.createElement('h1');
+      h.textContent = 'A Very Long Essay';
+      story.append(h);
+      for (let p = 0; p < 60; p += 1) {
+        const words = [];
+        for (let i = 0; i < 130; i += 1) words.push(common[(p * 7 + i) % common.length]);
+        words.splice(20, 0, tag(p * 2));
+        words.splice(90, 0, tag(p * 2 + 1));
+        const para = document.createElement('p');
+        para.textContent = words.join(' ').replace(/^./, (c) => c.toUpperCase()) + '.';
+        story.append(para);
+      }
+      const end = document.createElement('p');
+      end.id = 'last';
+      end.textContent = 'The end.';
+      story.append(end);
+    </script>
+  </body>
+</html>

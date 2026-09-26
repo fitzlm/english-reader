@@ -136,6 +136,7 @@ function onScroll() {
       else if (y < lastScroll - 6) dom.bar.classList.remove('hidden');
     }
     lastScroll = y;
+    glossary?.maybeLoadMoreContext();
   });
 }
 
@@ -177,7 +178,8 @@ function hideToast() {
 function renderStatus() {
   const vocab = formatNumber(settings.vocab);
   const { state, count } = status;
-  dom.chip.classList.toggle('loading', state === 'loading');
+  dom.chip.classList.toggle('loading', state === 'loading' || Boolean(status.ctxLoading));
+  dom.chip.title = status.ctxLoading ? '正在结合上下文确定词义' : '跳到文末生词表';
   dom.chip.hidden = state === 'idle' || state === 'empty';
   dom.glossary.hidden = state === 'idle' || state === 'empty';
   dom.glossarySub.textContent = state === 'ready' && count ? `词汇量 ${vocab} 以外 · 按出现顺序` : '';

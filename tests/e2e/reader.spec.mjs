@@ -205,3 +205,81 @@ test('设置页：词汇量档位、语境开关、认识的词', async ({ conte
   await page.locator('#knownClear').click();
   await expect(page.locator('#knownCount')).toHaveText('0 个');
 });
+
+test('兜底：注入不了时用纯文本在新标签页打开，关闭按钮关掉标签页', async ({ context, serviceWorker, extensionId }) => {
+  await installApiMock(context);
+  const text = [
+    'The committee examined the evidence with considerable care and found',
+    'that the proposed changes would improve the reliability of the inter-',
+    'national system while reducing costs for smaller participants overall.',
+    'A second review is planned.',
+    '',
+    'Meanwhile the relentless vendors kept their meticulous records.',
+  ].join('\n');
+  const id = 'fallback-test';
+  await serviceWorker.evaluate(
+    ([key, doc]) => chrome.storage.session.set({ [key]: doc }),
+    [`doc:${id}`, { text, meta: { title: 'A PDF', url: 'https://example.com/a.pdf', site: 'example.com' } }],
+  );
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/src/reader/reader.html#${id}`);
+  await expect(page.locator('#article p')).toHaveCount(2);
+  await expect(page.locator('#article p').first()).toContainText('the international system');
+  await expect(page.locator('.w.rare[data-f="relentless"]')).toHaveCount(1);
+  await expect(page.locator('#sourceName')).toHaveText('example.com');
+  await expect(page).toHaveTitle('静读 · A PDF');
+  const closed = page.waitForEvent('close');
+  await page.locator('#closeBtn').click();
+  await closed;
+});
+
+test('后端故障：给出提示，重试后恢复', async ({ context, serviceWorker, server }) => {
+  const calls = await installApiMock(context, { failGlossary: true });
+  const page = await context.newPage();
+  const url = `${server}/article.html`;
+  await page.goto(url);
+  await selectBetween(page, '#title', '#last');
+  await openReader(serviceWorker, url);
+  const frame = await readerFrame(page);
+  // 正文照常排好，只是生词暂时没有
+  await expect(frame.locator('#article h1')).toBeVisible();
+  await expect(frame.locator('#countText')).toHaveText('生词加载失败');
+  await expect(frame.locator('#glossaryState')).toContainText('服务器暂时不可用');
+  calls.state.failGlossary = false;
+  await frame.locator('#glossaryState button').click();
+  await expect(frame.locator('#countText')).toHaveText(/\d+ 个生词/);
+  await expect(frame.locator('.w.rare[data-f="cacophony"]')).toHaveCount(1);
+});
+
+test('长文：生词就绪要快；语境义按阅读进度分批补问，最多 3 批', async ({ context, serviceWorker, server }) => {
+  const calls = await installApiMock(context);
+  const page = await context.newPage();
+  const url = `${server}/long.html`;
+  await page.goto(url);
+  await selectBetween(page, 'h1', '#last');
+  const t0 = Date.now();
+  await openReader(serviceWorker, url);
+  const frame = await readerFrame(page);
+  await expect(frame.locator('#countText')).toHaveText('120 个生词');
+  const readyMs = Date.now() - t0;
+  console.log(`长文（约 7800 词）从打开到生词就绪：${readyMs}ms`);
+  expect(readyMs).toBeLessThan(4000);
+
+  // 第一批只问开头 40 个
+  await expect.poll(() => calls.context).toBe(1);
+  expect(calls.contextItems.map((i) => i.key).slice(0, 3)).toEqual(['zqaa', 'zqab', 'zqac']);
+  await expect(frame.locator('.note[data-k="zqaa"]')).toContainText('语境aa');
+  await expect(frame.locator('.note[data-k="zqci"]')).toContainText('合成词ci');
+
+  // 往下读：补问第二批
+  await frame.locator('.w[data-f="zqbk"]').scrollIntoViewIfNeeded();
+  await expect.poll(() => calls.context).toBe(2);
+  await expect(frame.locator('.note[data-k="zqci"]')).toContainText('语境ci', { timeout: 8000 });
+  // 读到底：第三批之后不再请求
+  await frame.locator('#glossary').scrollIntoViewIfNeeded();
+  await expect.poll(() => calls.context).toBe(3);
+  await page.waitForTimeout(800);
+  await frame.locator('#article').evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(800);
+  expect(calls.context).toBe(3);
+});

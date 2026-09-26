@@ -121,7 +121,8 @@ export function mockGlossary(words) {
       continue;
     }
     const lemma = FORMS[form] || form;
-    const data = LEXICON[lemma];
+    // 长文测试用的合成生词：zq 开头的一律当生僻词
+    const data = LEXICON[lemma] || (form.startsWith('zq') ? { rank: 20000, phonetic: '', defs: [d('n.', `合成词${form.slice(2)}`)] } : null);
     if (data) {
       entries[form] = { lemma, rank: data.rank, level: data.level ?? null, name: false };
       lemmas[lemma] = { word: lemma, rank: data.rank, phonetic: data.phonetic, audio: '', defs: data.defs, tags: ['CET6'], name: false };
@@ -134,6 +135,7 @@ export function mockGlossary(words) {
 }
 
 export async function installApiMock(context, { failGlossary = false, contextStatus = 200 } = {}) {
+  const state = { failGlossary };
   const calls = { glossary: 0, translate: 0, guest: 0, context: 0, contextItems: [] };
   await context.route('https://json-view.org/english/api/**', async (route) => {
     const url = new URL(route.request().url());
@@ -144,7 +146,7 @@ export async function installApiMock(context, { failGlossary = false, contextSta
     }
     if (url.pathname.endsWith('/api/words/glossary')) {
       calls.glossary += 1;
-      if (failGlossary) return json(503, { detail: 'down' });
+      if (state.failGlossary) return json(503, { detail: 'down' });
       const { words } = route.request().postDataJSON();
       return json(200, mockGlossary(words));
     }
@@ -160,11 +162,15 @@ export async function installApiMock(context, { failGlossary = false, contextSta
       calls.contextItems.push(...items);
       if (contextStatus !== 200) return json(contextStatus, { detail: 'quota' });
       const glosses = {};
-      for (const item of items) if (CONTEXT[item.key]) glosses[item.key] = CONTEXT[item.key];
+      for (const item of items) {
+        if (CONTEXT[item.key]) glosses[item.key] = CONTEXT[item.key];
+        else if (item.key.startsWith('zq')) glosses[item.key] = { pos: 'n.', zh: `语境${item.key.slice(2)}` };
+      }
       return json(200, { glosses });
     }
     return json(404, { detail: 'not mocked' });
   });
+  calls.state = state;
   return calls;
 }
 
