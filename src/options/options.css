@@ -84,6 +84,13 @@ body {
   box-shadow: 0 10px 28px -12px rgba(43, 41, 38, 0.45);
 }
 
+@media (prefers-color-scheme: dark) {
+  /* 墨色图标放在深色底上会融进去：加一圈极细的亮边 */
+  .logo {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 10px 28px -12px rgba(0, 0, 0, 0.6);
+  }
+}
+
 h1 {
   margin: 0;
   font-family: var(--font-serif);
@@ -486,8 +493,18 @@ button[disabled] {
 .foot {
   margin-top: 56px;
   font-size: 12px;
+  line-height: 1.8;
   color: var(--muted);
   text-align: center;
+}
+
+.foot p {
+  margin: 0 0 8px;
+}
+
+.foot strong {
+  font-weight: 600;
+  color: var(--soft);
 }
 
 @media (max-width: 560px) {

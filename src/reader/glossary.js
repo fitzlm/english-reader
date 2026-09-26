@@ -491,8 +491,8 @@ export class Glossary {
         head.append(form);
       }
       const tail = el('span', 'entry-tail');
-      if (group.rank != null) tail.append(el('span', 'entry-rank', `#${formatNumber(group.rank)}`));
       tail.append(iconButton('known-btn', CHECK_SVG, `认识 ${group.word}，不再标出`, () => this.markKnown(group)));
+      if (group.rank != null) tail.append(el('span', 'entry-rank', `#${formatNumber(group.rank)}`));
       head.append(tail);
       item.append(head);
       item.append(defsList(group, { maxDefs: 3, maxSenses: 4 }));
@@ -747,7 +747,25 @@ export class Glossary {
     if (!/^[A-Za-z]+(?:['’-][A-Za-z]+)*$/.test(raw)) return;
     const form = normalizeForm(raw);
     if (!form || !this.data) return;
-    const rect = selection.getRangeAt(0).getBoundingClientRect();
+    await this.lookupForm(form, selection.getRangeAt(0).getBoundingClientRect());
+  }
+
+  /** 只选了一两个词时直接弹出第一个词的卡片：优先生词，其次第一个词。 */
+  openFirstCard() {
+    const span = this.spans.find((s) => s.classList.contains('rare'));
+    if (span) {
+      this.showCard(span, { pinned: true });
+      return;
+    }
+    const occ = this.occurrences[0];
+    if (!occ || !this.data || !occ.node.isConnected) return;
+    const range = document.createRange();
+    range.setStart(occ.node, Math.min(occ.start, occ.node.length));
+    range.setEnd(occ.node, Math.min(occ.end, occ.node.length));
+    this.lookupForm(occ.form, range.getBoundingClientRect());
+  }
+
+  async lookupForm(form, rect) {
     const info = this.forms.get(form);
     const group = info ? this.groups.get(info.key) : null;
     this.popState.span?.classList.remove('open');

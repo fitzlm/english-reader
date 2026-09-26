@@ -6,18 +6,27 @@
 
 import { captureSelection } from './capture.js';
 import { mountReader, showHint } from './overlay.js';
+import { readerUrl, storeDoc } from './shared/docs.js';
 
 const MENU_ID = 'linguipro-open-reader';
-const READER_PATH = 'src/reader/reader.html';
-const KEEP_DOCS = 6;
+const OPTIONS_PAGE = chrome.runtime.getURL('src/options/options.html');
+
+const WEB_PATTERNS = ['http://*/*', 'https://*/*', 'file:///*'];
+
+function createMenu(patterns, onDone) {
+  chrome.contextMenus.create({ id: MENU_ID, title: '用静读打开', contexts: ['selection'], documentUrlPatterns: patterns }, () => {
+    onDone(chrome.runtime.lastError ? chrome.runtime.lastError.message : null);
+  });
+}
 
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({
-      id: MENU_ID,
-      title: '用静读打开',
-      contexts: ['selection'],
-      documentUrlPatterns: ['http://*/*', 'https://*/*', 'file:///*'],
+    // 欢迎页也要能用：安装后用户做的第一件事，就是在那里选中示范段落、右键试一试。
+    // 万一这个 Chrome 不认扩展页的匹配模式，退回只在网页上显示，绝不能让菜单整个消失。
+    createMenu([...WEB_PATTERNS, `${OPTIONS_PAGE}*`], (error) => {
+      // 记进 storage.session 而不是全局变量：后台 service worker 随时可能被回收重启
+      chrome.storage.session.set({ menuMode: error ? 'web-only' : 'with-welcome' });
+      if (error) chrome.contextMenus.removeAll(() => createMenu(WEB_PATTERNS, () => {}));
     });
   });
   if (reason === 'install') chrome.runtime.openOptionsPage();
@@ -25,7 +34,7 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId !== MENU_ID || !tab) return;
-  openReader(tab, { frameId: info.frameId, selectionText: info.selectionText });
+  openReader(tab, { frameId: info.frameId, selectionText: info.selectionText, pageUrl: info.pageUrl });
 });
 
 chrome.commands.onCommand.addListener((command, tab) => {
@@ -53,19 +62,6 @@ async function capture(tab, frameId) {
   }
 }
 
-async function storeDoc(doc) {
-  const id = crypto.randomUUID();
-  const all = await chrome.storage.session.get(null);
-  const old = Object.entries(all)
-    .filter(([key]) => key.startsWith('doc:'))
-    .sort((a, b) => (a[1].savedAt || 0) - (b[1].savedAt || 0))
-    .map(([key]) => key);
-  const stale = old.slice(0, Math.max(0, old.length - (KEEP_DOCS - 1)));
-  if (stale.length) await chrome.storage.session.remove(stale);
-  await chrome.storage.session.set({ [`doc:${id}`]: { ...doc, savedAt: Date.now() } });
-  return id;
-}
-
 async function hint(tab, message) {
   try {
     await chrome.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, func: showHint, args: [message] });
@@ -75,7 +71,24 @@ async function hint(tab, message) {
   }
 }
 
-export async function openReader(tab, { frameId, selectionText } = {}) {
+/**
+ * 扩展自己的页面（欢迎页）不能注入脚本，改由它自己在本页抓选区、盖阅读层。
+ * 没有 tabs 权限时拿不到扩展页的 tab.url，所以不靠 URL 判断，而是问一句：
+ * 欢迎页只在标签页 id 对上时应答；没人应答就是普通网页。
+ */
+async function handledByOwnPage(tab, pageUrl) {
+  const url = pageUrl || tab.url || '';
+  if (url && !url.startsWith(OPTIONS_PAGE)) return false;
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'lp-open-selection', tabId: tab.id });
+    return Boolean(response && response.handled);
+  } catch (err) {
+    return false;
+  }
+}
+
+export async function openReader(tab, { frameId, selectionText, pageUrl } = {}) {
+  if (await handledByOwnPage(tab, pageUrl)) return;
   let doc = await capture(tab, frameId);
   if (!doc && selectionText && selectionText.trim()) {
     doc = { text: selectionText, meta: { title: tab.title || '', url: tab.url || '', site: hostOf(tab.url) } };
@@ -85,8 +98,7 @@ export async function openReader(tab, { frameId, selectionText } = {}) {
     return;
   }
 
-  const id = await storeDoc(doc);
-  const url = `${chrome.runtime.getURL(READER_PATH)}#${id}`;
+  const url = readerUrl(await storeDoc(doc));
   try {
     await chrome.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, func: mountReader, args: [url] });
   } catch (err) {

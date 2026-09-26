@@ -231,13 +231,21 @@ export async function selectBetween(page, startSelector, endSelector) {
 }
 
 /** 等同于右键「用静读打开」：Playwright 点不了原生菜单，直接调后台同一个入口。 */
-export async function openReader(serviceWorker, pageUrl) {
-  await serviceWorker.evaluate(async (url) => {
-    const tabs = await chrome.tabs.query({});
-    const tab = tabs.find((t) => t.url === url);
-    if (!tab) throw new Error(`tab not found: ${url}`);
-    await globalThis.__lpOpenReader(tab, {});
-  }, pageUrl);
+export async function openReader(serviceWorker, pageUrl, { tabId } = {}) {
+  await serviceWorker.evaluate(
+    async ([url, id]) => {
+      // 扩展页的 tab.url 对后台不可见，调用方直接给 tabId
+      const tab = id != null ? await chrome.tabs.get(id) : (await chrome.tabs.query({})).find((t) => t.url === url);
+      if (!tab) throw new Error(`tab not found: ${url}`);
+      await globalThis.__lpOpenReader(tab, {});
+    },
+    [pageUrl, tabId ?? null],
+  );
+}
+
+/** 扩展页里拿自己的标签页 id。 */
+export function ownTabId(page) {
+  return page.evaluate(() => new Promise((resolve) => chrome.tabs.getCurrent((tab) => resolve(tab.id))));
 }
 
 export async function readerFrame(page) {

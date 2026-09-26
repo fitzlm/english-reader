@@ -1,11 +1,14 @@
 import path from 'node:path';
-import { SHOTS, expect, installApiMock, openReader, readerFrame, selectBetween, test } from './harness.mjs';
-
-test.describe.configure({ mode: 'serial' });
+import { SHOTS, expect, installApiMock, openReader, ownTabId, readerFrame, selectBetween, test } from './harness.mjs';
 
 test('选中文章 -> 阅读层：版式干净、生词标出、旁注与生词表齐全', async ({ context, serviceWorker, server }) => {
   const calls = await installApiMock(context);
   const page = await context.newPage();
+  const consoleErrors = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error' && msg.location().url.startsWith('chrome-extension://')) consoleErrors.push(msg.text());
+  });
+  page.on('pageerror', (err) => consoleErrors.push(err.message));
   const url = `${server}/article.html`;
   await page.goto(url);
   await page.screenshot({ path: path.join(SHOTS, '00-original-page.png') });
@@ -68,8 +71,11 @@ test('选中文章 -> 阅读层：版式干净、生词标出、旁注与生词�
   await page.waitForTimeout(400);
   await page.screenshot({ path: path.join(SHOTS, '01-reader-paper.png') });
   await frame.locator('#glossary').scrollIntoViewIfNeeded();
+  await expect(frame.locator('.glossary-tip')).toContainText('双击正文里任意单词也能查释义');
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(SHOTS, '02-glossary.png') });
+  // 背面的做工：阅读层全程没有任何脚本错误
+  expect(consoleErrors).toEqual([]);
 });
 
 test('交互：释义卡片、排版面板、词汇量、主题、窄屏、Esc 关闭', async ({ context, serviceWorker, server }) => {
@@ -282,4 +288,104 @@ test('长文：生词就绪要快；语境义按阅读进度分批补问，最�
   await frame.locator('#article').evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.waitForTimeout(800);
   expect(calls.context).toBe(3);
+});
+
+test('欢迎页：选中示范段落就能直接试用（右键菜单在扩展页也生效）', async ({ context, serviceWorker, extensionId }) => {
+  await installApiMock(context);
+  await expect.poll(async () => (await serviceWorker.evaluate(() => chrome.storage.session.get('menuMode'))).menuMode).toBe('with-welcome');
+  const page = await context.newPage();
+  const optionsUrl = `chrome-extension://${extensionId}/src/options/options.html`;
+  await page.goto(optionsUrl);
+  const tabId = await ownTabId(page);
+  await page.evaluate(() => {
+    const sample = document.querySelector('.sample');
+    const range = document.createRange();
+    range.selectNodeContents(sample);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+  await openReader(serviceWorker, optionsUrl, { tabId });
+  const frame = await readerFrame(page);
+  await expect(frame.locator('#article p')).toHaveCount(2);
+  await expect(frame.locator('#article p').first()).toContainText('Every city has its own rhythm.');
+  await expect(frame.locator('#countText')).toHaveText(/个生词|没有生词/);
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: path.join(SHOTS, '09-welcome-try.png') });
+  await page.keyboard.press('Escape');
+  await expect(page.locator('linguipro-reader')).toHaveCount(0);
+
+  // 什么都没选：给提示，不打开空的阅读层
+  await page.evaluate(() => window.getSelection().removeAllRanges());
+  await openReader(serviceWorker, optionsUrl, { tabId });
+  await expect(page.locator('#linguipro-reader-hint')).toHaveCount(1);
+  await expect(page.locator('linguipro-reader')).toHaveCount(0);
+});
+
+test('只选一个词：直接弹出它的释义卡片', async ({ context, serviceWorker, server }) => {
+  await installApiMock(context);
+  const page = await context.newPage();
+  const url = `${server}/article.html`;
+  await page.goto(url);
+  await page.evaluate(() => {
+    const p = document.querySelector('#first');
+    const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const i = node.nodeValue.indexOf('cacophony');
+      if (i !== -1) {
+        const range = document.createRange();
+        range.setStart(node, i);
+        range.setEnd(node, i + 'cacophony'.length);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(range);
+        return;
+      }
+    }
+  });
+  await openReader(serviceWorker, url);
+  const frame = await readerFrame(page);
+  await expect(frame.locator('#pop')).toBeVisible();
+  await expect(frame.locator('#pop .pop-word')).toHaveText('cacophony');
+  await expect(frame.locator('#glossary')).toBeHidden();
+  await expect(frame.locator('#meta')).toBeHidden();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(SHOTS, '10-single-word.png') });
+});
+
+test('深色模式：设置页跟随系统，阅读页「跟随系统」主题切到夜间', async ({ context, serviceWorker, server, extensionId }) => {
+  await installApiMock(context);
+  const options = await context.newPage();
+  await options.emulateMedia({ colorScheme: 'dark' });
+  await options.goto(`chrome-extension://${extensionId}/src/options/options.html`);
+  const bg = await options.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  expect(bg).toBe('rgb(28, 27, 25)');
+  await options.screenshot({ path: path.join(SHOTS, '11-options-dark.png') });
+
+  const page = await context.newPage();
+  await page.emulateMedia({ colorScheme: 'dark' });
+  const url = `${server}/article.html`;
+  await page.goto(url);
+  await selectBetween(page, '#title', '#last');
+  await openReader(serviceWorker, url);
+  const frame = await readerFrame(page);
+  await expect(frame.locator('html')).toHaveAttribute('data-theme', 'night');
+  await expect(frame.locator('#countText')).toHaveText(/个生词/);
+  await frame.locator('.w.rare[data-f="labyrinth"]').first().hover();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: path.join(SHOTS, '12-reader-dark-card.png') });
+});
+
+test('游客 AI 次数用完：安静地改用词典释义，并给出登录入口', async ({ context, serviceWorker, server }) => {
+  await installApiMock(context, { contextStatus: 429 });
+  const page = await context.newPage();
+  const url = `${server}/article.html`;
+  await page.goto(url);
+  await selectBetween(page, '#title', '#last');
+  await openReader(serviceWorker, url);
+  const frame = await readerFrame(page);
+  await expect(frame.locator('.ctx-notice')).toContainText('今天的语境释义次数已用完');
+  await expect(frame.locator('.ctx-notice a')).toHaveText('登录 LinguiPro 账号可获得更多次数');
+  // 词典释义照常在
+  await expect(frame.locator('.note[data-k="clatter"]')).toContainText('哗啦声');
 });

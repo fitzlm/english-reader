@@ -1,6 +1,7 @@
 import { Glossary } from './glossary.js';
 import { countWords, renderBlocks } from './render.js';
 import { FONT_SIZES, loadKnownWords, loadSettings, onSettingsChanged, saveSettings } from '../shared/settings.js';
+import { getAuth } from '../shared/api.js';
 import { VOCAB_STOPS, blocksFromText, formatNumber, nearestStopIndex, readingMinutes } from '../shared/text.js';
 
 const $ = (id) => document.getElementById(id);
@@ -213,7 +214,23 @@ function renderStatus() {
       const notice = document.createElement('span');
       notice.className = 'ctx-notice';
       notice.textContent = status.ctxNotice;
+      if (status.guest) {
+        const login = document.createElement('a');
+        login.href = '#';
+        login.textContent = '登录 LinguiPro 账号可获得更多次数';
+        login.addEventListener('click', (event) => {
+          event.preventDefault();
+          chrome.runtime.openOptionsPage();
+        });
+        notice.append(' ', login);
+      }
       dom.state.append(notice);
+    }
+    if (count >= 0) {
+      const tip = document.createElement('span');
+      tip.className = 'glossary-tip';
+      tip.textContent = '提示：双击正文里任意单词也能查释义；在卡片里点「认识了」，它以后就不再被标出。';
+      dom.state.append(tip);
     }
   }
 }
@@ -307,9 +324,13 @@ function httpUrl(value) {
   }
 }
 
+function ownResource(value) {
+  return typeof value === 'string' && value.startsWith(chrome.runtime.getURL('')) ? value : '';
+}
+
 function renderSource(meta) {
   dom.sourceName.textContent = meta.site || meta.title || '';
-  const icon = httpUrl(meta.icon);
+  const icon = httpUrl(meta.icon) || ownResource(meta.icon);
   if (icon) {
     dom.sourceIcon.src = icon;
     dom.sourceIcon.hidden = false;
@@ -357,7 +378,9 @@ async function main() {
     dom.article.after(Object.assign(document.createElement('p'), { className: 'footnote', textContent: '选中的内容太长，只排版了前面一部分。' }));
   }
   const words = countWords(dom.article);
-  dom.meta.textContent = words ? `约 ${readingMinutes(words)} 分钟 · ${formatNumber(words)} 词` : '';
+  // 只选了一两个词：这是查词，不是阅读——不显示时长、旁注与生词表，只留卡片
+  document.body.classList.toggle('lookup-mode', words > 0 && words <= 3);
+  dom.meta.textContent = words >= 40 ? `约 ${readingMinutes(words)} 分钟 · ${formatNumber(words)} 词` : '';
 
   // 字体就绪再淡入，避免淡入过程中字体闪一下；最多等 400ms
   await Promise.race([document.fonts.ready, new Promise((resolve) => setTimeout(resolve, 400))]);
@@ -373,6 +396,9 @@ async function main() {
   updateLayout();
   await glossary.load();
   updateLayout();
+  // 只选了一两个词：多半是想查词，直接把释义卡片弹出来
+  if (words > 0 && words <= 3) glossary.openFirstCard();
+  getAuth().then((auth) => onGlossaryStatus({ guest: !auth || auth.kind !== 'user' }));
 
   onSettingsChanged((patch) => update(patch, { persist: false }));
 }

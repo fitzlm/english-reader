@@ -10,6 +10,9 @@ import {
 } from '../shared/settings.js';
 import { VOCAB_STOPS, formatNumber, nearestStopIndex } from '../shared/text.js';
 import { fetchAccountVocab, fetchMe, getAuth, login, logout } from '../shared/api.js';
+import { captureSelection } from '../capture.js';
+import { mountReader, showHint } from '../overlay.js';
+import { readerUrl, storeDoc } from '../shared/docs.js';
 
 const PRESETS = [
   ['初中', 1500],
@@ -240,6 +243,34 @@ async function bindServer() {
     await renderAccount();
   });
 }
+
+// ---------- 在欢迎页里试一试 ----------
+// 后台不能往扩展页注入脚本，右键菜单、快捷键、工具栏按钮在这里点下时，后台发消息过来，
+// 由本页用同一套抓取与阅读层代码完成。
+
+async function openSelectionHere() {
+  const doc = captureSelection();
+  if (!doc) {
+    showHint('先选中想读的英文，再用静读打开');
+    return;
+  }
+  // 本页的 hostname 是扩展 id，来源栏换成产品名和图标
+  doc.meta = { ...doc.meta, site: 'LinguiPro 静读 · 示范段落', icon: chrome.runtime.getURL('icons/icon-32.png') };
+  mountReader(readerUrl(await storeDoc(doc)));
+}
+
+let myTabId = null;
+chrome.tabs.getCurrent((tab) => {
+  myTabId = tab ? tab.id : null;
+});
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // 只有标签页对上的那一个欢迎页应答；其余保持沉默，后台据此判断要不要自己注入
+  if (!message || message.type !== 'lp-open-selection' || message.tabId !== myTabId) return false;
+  openSelectionHere();
+  sendResponse({ handled: true });
+  return false;
+});
 
 async function main() {
   settings = await loadSettings();
