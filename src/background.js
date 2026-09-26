@@ -7,6 +7,7 @@
 import { captureSelection } from './capture.js';
 import { mountReader, showHint } from './overlay.js';
 import { readerUrl, storeDoc } from './shared/docs.js';
+import { translateParagraph } from './shared/paragraph-translation.js';
 
 const MENU_ID = 'linguipro-open-reader';
 const OPTIONS_PAGE = chrome.runtime.getURL('src/options/options.html');
@@ -42,6 +43,15 @@ chrome.commands.onCommand.addListener((command, tab) => {
 });
 
 chrome.action.onClicked.addListener((tab) => openReader(tab, {}));
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type !== 'lp-translate-paragraph') return false;
+  translateParagraph(message.text).then(
+    (translation) => sendResponse({ translation }),
+    (err) => sendResponse({ error: err.message || '翻译失败', ...(err.status ? { status: err.status } : {}) }),
+  );
+  return true;
+});
 
 /** 多个框架都返回了选区时：优先有焦点的框架，其次内容最多的。 */
 function pickCapture(results) {

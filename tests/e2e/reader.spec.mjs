@@ -71,7 +71,7 @@ test('选中文章 -> 阅读层：版式干净、生词标出、旁注与生词�
   await page.waitForTimeout(400);
   await page.screenshot({ path: path.join(SHOTS, '01-reader-paper.png') });
   await frame.locator('#glossary').scrollIntoViewIfNeeded();
-  await expect(frame.locator('.glossary-tip')).toContainText('双击正文里任意单词也能查释义');
+  await expect(frame.locator('.glossary-tip')).toContainText('单击正文里任意单词也能查释义');
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(SHOTS, '02-glossary.png') });
   // 背面的做工：阅读层全程没有任何脚本错误
@@ -120,8 +120,8 @@ test('交互：释义卡片、排版面板、词汇量、主题、窄屏、Esc �
   await expect(frame.locator('.w.rare[data-f="ephemeral"]')).toHaveCount(2);
   await expect.poll(async () => (await serviceWorker.evaluate(() => chrome.storage.local.get('known'))).known).not.toContain('ephemeral');
 
-  // 双击一个常用词：也能查
-  await frame.locator('#article p').first().dblclick({ position: { x: 30, y: 12 } });
+  // 单击一个常用词：也能查
+  await frame.locator('#article p').first().click({ position: { x: 30, y: 12 } });
   await expect(pop).toBeVisible();
 
   // Esc 先关卡片，不关阅读层
@@ -181,6 +181,7 @@ test('交互：释义卡片、排版面板、词汇量、主题、窄屏、Esc �
 
   // Esc 关闭阅读层，原网页滚动恢复
   await frame.locator('#article').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   await expect(page.locator('linguipro-reader')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => document.documentElement.style.overflow)).toBe('');

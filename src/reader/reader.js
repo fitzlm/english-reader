@@ -1,4 +1,5 @@
 import { Glossary } from './glossary.js';
+import { addParagraphTranslation } from './paragraph-translation.js';
 import { countWords, renderBlocks } from './render.js';
 import { FONT_SIZES, loadKnownWords, loadSettings, onSettingsChanged, saveSettings } from '../shared/settings.js';
 import { getAuth } from '../shared/api.js';
@@ -20,6 +21,8 @@ const dom = {
   larger: $('larger'),
   sizeValue: $('sizeValue'),
   fontSeg: $('fontSeg'),
+  measureSeg: $('measureSeg'),
+  spacingSeg: $('spacingSeg'),
   themeSeg: $('themeSeg'),
   vocabRange: $('vocabRange'),
   vocabValue: $('vocabValue'),
@@ -73,25 +76,55 @@ function applyVocab() {
   renderStatus();
 }
 
+function applyRhythm() {
+  for (const key of ['measure', 'spacing']) {
+    document.documentElement.dataset[key] = settings[key];
+    for (const button of dom[`${key}Seg`].querySelectorAll('button')) {
+      button.setAttribute('aria-pressed', String(button.dataset[key] === settings[key]));
+    }
+  }
+}
+
 function applyAll() {
   applyTheme();
   applyFont();
+  applyRhythm();
   applyVocab();
   requestAnimationFrame(updateLayout);
 }
 
 function update(patch, { persist = true } = {}) {
+  const reflow = ['font', 'fontSize', 'measure', 'spacing'].some((key) => key in patch && patch[key] !== settings[key]);
+  const anchor = reflow ? readingAnchor() : null;
   settings = { ...settings, ...patch };
   if ('theme' in patch) applyTheme();
-  if ('font' in patch || 'fontSize' in patch) {
+  if (reflow) {
+    glossary?.hideCard();
     applyFont();
-    requestAnimationFrame(updateLayout);
+    applyRhythm();
+    requestAnimationFrame(() => {
+      updateLayout();
+      if (anchor?.range.startContainer.isConnected) {
+        window.scrollBy(0, anchor.range.getBoundingClientRect().top - anchor.top);
+      }
+      onScroll();
+    });
   }
   if ('vocab' in patch) {
     applyVocab();
     glossary?.setVocab(settings.vocab);
   }
   if (persist) saveSettings(patch);
+}
+
+/** 改排版时，把视口顶部正在读的字留在原位置。保留 Range，不改动原生选区。 */
+function readingAnchor() {
+  if (window.scrollY < 100) return null;
+  const box = dom.article.getBoundingClientRect();
+  if (box.bottom < 100) return null;
+  const range = document.caretRangeFromPoint(box.left + 4, Math.max(100, box.top + 4));
+  if (!range || !dom.article.contains(range.startContainer)) return null;
+  return { range, top: range.getBoundingClientRect().top };
 }
 
 // ---------- 布局：宽屏把释义放在右侧页边，放不下就把版心左移，再不够就收起 ----------
@@ -103,7 +136,7 @@ const PAGE_PAD = 28;
 
 function updateLayout() {
   const vw = document.documentElement.clientWidth;
-  const article = dom.article.getBoundingClientRect().width || Math.min(vw - PAGE_PAD * 2, settings.fontSize * 34);
+  const article = dom.article.getBoundingClientRect().width || Math.min(vw - PAGE_PAD * 2, settings.fontSize * 40, 800);
   const side = (vw - article) / 2;
   const need = NOTE_GAP + NOTE_W + EDGE;
   let mode = 'narrow';
@@ -229,7 +262,7 @@ function renderStatus() {
     if (count >= 0) {
       const tip = document.createElement('span');
       tip.className = 'glossary-tip';
-      tip.textContent = '提示：双击正文里任意单词也能查释义；在卡片里点「认识了」，它以后就不再被标出。';
+      tip.textContent = '提示：单击正文里任意单词也能查释义；在卡片里点「认识了」，它以后就不再被标出。';
       dom.state.append(tip);
     }
   }
@@ -265,6 +298,12 @@ function bindControls() {
     const button = event.target.closest('button[data-font]');
     if (button) update({ font: button.dataset.font });
   });
+  for (const key of ['measure', 'spacing']) {
+    dom[`${key}Seg`].addEventListener('click', (event) => {
+      const button = event.target.closest(`button[data-${key}]`);
+      if (button) update({ [key]: button.dataset[key] });
+    });
+  }
   dom.themeSeg.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-theme]');
     if (button) update({ theme: button.dataset.theme });
@@ -388,6 +427,7 @@ async function main() {
     { vocab: settings.vocab, known: await loadKnownWords(), contextGloss: settings.contextGloss, onStatus: onGlossaryStatus },
   );
   glossary.scan();
+  if (words > 3) addParagraphTranslation(dom.article);
   dom.article.classList.add('reveal');
   const loading = glossary.load();
 

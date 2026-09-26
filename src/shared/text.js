@@ -60,17 +60,16 @@ export function difficultyOf(rank, level) {
  * 从一段文字里取出包含 offset 位置的那句话，最长 maxLength 字符（超长时以 offset 为中心截取）。
  */
 export function sentenceAt(text, offset, maxLength = 360) {
-  const re = /[^.!?…]+(?:[.!?…]+["”’)\]]*|$)\s*/g;
-  let sentence = text;
   let start = 0;
-  for (let m = re.exec(text); m && m[0]; m = re.exec(text)) {
-    if (offset >= m.index && offset < m.index + m[0].length) {
-      sentence = m[0];
-      start = m.index;
+  let end = text.length;
+  for (const [boundary] of sentenceBreaks(text)) {
+    if (offset < boundary) {
+      end = boundary;
       break;
     }
+    start = boundary;
   }
-  sentence = sentence.trim();
+  const sentence = text.slice(start, end).trim();
   if (sentence.length <= maxLength) return sentence;
   const local = Math.max(0, offset - start);
   const from = Math.max(0, Math.min(local - Math.floor(maxLength / 2), sentence.length - maxLength));
@@ -160,24 +159,143 @@ function reflowLines(lines) {
   return paras;
 }
 
-/** 超长且没有任何换行的一段（右键菜单拿到的纯文本会丢换行）：按句子切成 3–5 句一段。 */
-export function splitLongParagraph(text, target = 520) {
-  if (text.length <= target * 1.7) return [text];
-  const sentences = text.split(/(?<=[.!?…]["”’)\]]?)\s+(?=["“(\[]?[A-Z0-9])/);
-  const out = [];
-  let current = '';
-  for (const s of sentences) {
-    current = current ? `${current} ${s}` : s;
-    if (current.length >= target) {
-      out.push(current);
-      current = '';
+const NONTERMINAL_PERIODS = new Set([
+  'mr', 'mrs', 'ms', 'dr', 'prof', 'sr', 'jr', 'st', 'vs', 'etc', 'fig', 'no',
+  'e.g', 'i.e', 'a.m', 'p.m', 'u.s', 'u.k',
+]);
+
+/** Scan terminal punctuation once; ICU skips valid periods before lowercase prose. */
+function sentenceBreaks(text, brEnds = new Set()) {
+  const breaks = [];
+  for (let index = 0; index < text.length; index += 1) {
+    const punctuationIndex = index;
+    const punctuation = text[index];
+    if (!/[.!?…。！？]/.test(punctuation)) continue;
+    let cursor = index + 1;
+    while (cursor < text.length && /[.!?…。！？]/.test(text[cursor])) cursor += 1;
+    while (cursor < text.length && /["”’')\]}]/.test(text[cursor])) cursor += 1;
+    let spaced = false;
+    let forced = false;
+    while (cursor < text.length && /\s/.test(text[cursor])) {
+      spaced = true;
+      if (brEnds.has(cursor + 1)) forced = true;
+      cursor += 1;
+    }
+    // Consume the inspected run even when it is not a sentence boundary.
+    // A long run of dots otherwise rescans every suffix.
+    index = cursor - 1;
+    if (cursor >= text.length || (/[.!?…]/.test(punctuation) && !spaced)) continue;
+    if (punctuation === '.') {
+      const tail = text.slice(Math.max(0, punctuationIndex - 64), punctuationIndex + 1);
+      const token = /([A-Za-z]+(?:\.[A-Za-z]+)*\.)$/.exec(tail)?.[1]?.slice(0, -1).toLowerCase();
+      if (token && (NONTERMINAL_PERIODS.has(token) || /^[a-z]$/.test(token) || /^(?:[a-z]\.)+[a-z]$/.test(token))) continue;
+    }
+    breaks.push([cursor, forced]);
+  }
+  return breaks;
+}
+
+/** Split at the first safe sentence end once this group reaches the threshold. */
+function groupRanges(text, target, brEnds = new Set(), protectedSpans = []) {
+  if (text.length <= target && brEnds.size === 0) return [[0, text.length]];
+  const breaks = sentenceBreaks(text, brEnds);
+  const ranges = [];
+  let start = 0;
+  let protectedIndex = 0;
+  const lastContentEnd = text.trimEnd().length;
+  for (const [boundary, forced] of breaks) {
+    while (protectedIndex < protectedSpans.length && protectedSpans[protectedIndex][1] <= boundary) protectedIndex += 1;
+    const span = protectedSpans[protectedIndex];
+    if (span && boundary > span[0] && boundary < span[1]) continue;
+    if (boundary >= lastContentEnd) break;
+    if (forced || boundary - start >= target) {
+      ranges.push([start, boundary]);
+      start = boundary;
     }
   }
-  if (current) {
-    if (out.length && current.length < target / 3) out[out.length - 1] += ` ${current}`;
-    else out.push(current);
+  ranges.push([start, text.length]);
+  return ranges;
+}
+
+/** Character ranges for reading groups. An indivisible sentence may exceed target. */
+export function readingGroupRanges(text, target = 320) {
+  return groupRanges(text, target);
+}
+
+/** Preserve every character and inline attribute when a captured HTML paragraph is split. */
+export function splitLongRuns(runs, target = 320) {
+  const text = runs.map((run) => run.br ? '\n' : (run.text || '')).join('');
+  const protectedSpans = [];
+  const brEnds = new Set();
+  let offset = 0;
+  for (const run of runs) {
+    const end = offset + (run.br ? 1 : (run.text || '').length);
+    if (run.br) brEnds.add(end);
+    if (run.href || run.code) protectedSpans.push([offset, end]);
+    offset = end;
   }
-  return out;
+  // A sentence-ending authored <br> is already a paragraph cue, even below threshold.
+  const ranges = groupRanges(text, target, brEnds, protectedSpans);
+  if (ranges.length === 1) return [runs];
+  const groups = ranges.map(() => []);
+  let position = 0;
+  let groupIndex = 0;
+  for (const run of runs) {
+    if (run.br) {
+      groups[groupIndex].push(run);
+      position += 1;
+      if (position === ranges[groupIndex][1]) groupIndex += 1;
+      continue;
+    }
+    const value = run.text || '';
+    const runStart = position;
+    const runEnd = position + value.length;
+    while (position < runEnd) {
+      const end = Math.min(runEnd, ranges[groupIndex][1]);
+      groups[groupIndex].push({ ...run, text: value.slice(position - runStart, end - runStart) });
+      position = end;
+      if (position === ranges[groupIndex][1]) groupIndex += 1;
+    }
+  }
+  for (const group of groups) {
+    for (let index = 0; index < group.length && (group[index].br || !group[index].text?.trim()); index += 1) {
+      if (group[index].br) group.splice(index--, 1);
+    }
+    for (let index = group.length - 1; index >= 0 && (group[index].br || !group[index].text?.trim()); index -= 1) {
+      if (group[index].br) group.splice(index, 1);
+    }
+  }
+  return groups;
+}
+
+/** Long plain paragraphs split only at complete sentences. */
+export function splitLongParagraph(text, target = 320) {
+  return readingGroupRanges(text, target).map(([start, end]) => text.slice(start, end).trim());
+}
+
+// 代码里几乎不会出现、正文里常见的字符。
+const PROSE_CHAR_RE = /[\p{L}\p{N}'’"“”.,;:!?%()\-–—…]/gu;
+// 只要出现一个，就不当正文：代码的括号、运算符、下划线、反引号。
+const CODE_MARK_RE = /[{}[\]<>;=|&$#`\\_~^*+]/;
+
+/**
+ * 论坛、评论区常给正文加 white-space: pre-wrap，抓取时会落进代码块。
+ * 只有完全不带代码痕迹、又确实是成句文字的，才还原成正文排版。
+ */
+export function isProsePre(text) {
+  const raw = String(text || '');
+  const lines = raw.split('\n').filter((line) => line.trim());
+  if (!lines.length) return false;
+  // 缩进、制表符、行内连续空格都是排版的痕迹，正文不会这样。
+  if (lines.some((line) => /^\s/.test(line) || /\t/.test(line) || / {2,}/.test(line))) return false;
+  // 短行本身是排版（诗行、歌词），并成段落会把断行弄丢。
+  if (lines.length > 1 && median(lines.map((line) => line.length)) < 40) return false;
+  if (CODE_MARK_RE.test(raw)) return false;
+  if (!/[.,;:!?]/.test(raw)) return false;
+  const chars = raw.replace(/\s+/g, '');
+  if (chars.length < 24) return false;
+  if ((chars.match(PROSE_CHAR_RE) || []).length / chars.length < 0.98) return false;
+  return (raw.match(/[\p{L}\p{N}'’]+/gu) || []).length >= 6;
 }
 
 /** 纯文本 -> 段落块。空行分段；硬换行的 PDF 文本重新接行；单行超长按句切段。 */
@@ -188,14 +306,17 @@ export function blocksFromText(text) {
     .trim();
   if (!clean) return [];
   const paragraphs = [];
+  const appendParagraph = (text) => {
+    splitLongParagraph(text).forEach((part, index) => paragraphs.push({ t: 'p', runs: [{ text: part }], continuation: index > 0 }));
+  };
   for (const chunk of clean.split(/\n[ \t]*\n+/)) {
     const lines = chunk.split('\n').map((l) => l.replace(/[ \t]+/g, ' ').trim()).filter(Boolean);
     if (!lines.length) continue;
-    if (lines.length === 1) paragraphs.push(...splitLongParagraph(lines[0]));
-    else if (looksHardWrapped(lines)) paragraphs.push(...reflowLines(lines).flatMap((p) => splitLongParagraph(p)));
-    else paragraphs.push(...lines.flatMap((l) => splitLongParagraph(l)));
+    if (lines.length === 1) appendParagraph(lines[0]);
+    else if (looksHardWrapped(lines)) reflowLines(lines).forEach(appendParagraph);
+    else lines.forEach(appendParagraph);
   }
-  return paragraphs.map((p) => ({ t: 'p', runs: [{ text: p }] }));
+  return paragraphs;
 }
 
 /** 估算阅读时长（分钟）。外语阅读按每分钟 160 词算，至少 1 分钟。 */

@@ -47,6 +47,21 @@
         </div>
       </div>
       <div class="panel-row">
+        <span class="panel-label" id="measureLabel">行宽</span>
+        <div class="segmented" id="measureSeg" role="group" aria-labelledby="measureLabel">
+          <button type="button" data-measure="narrow" aria-pressed="false">窄</button>
+          <button type="button" data-measure="comfortable" aria-pressed="false">适中</button>
+          <button type="button" data-measure="wide" aria-pressed="false">宽</button>
+        </div>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label" id="spacingLabel">行距</span>
+        <div class="segmented" id="spacingSeg" role="group" aria-labelledby="spacingLabel">
+          <button type="button" data-spacing="standard" aria-pressed="false">标准</button>
+          <button type="button" data-spacing="relaxed" aria-pressed="false">舒展</button>
+        </div>
+      </div>
+      <div class="panel-row">
         <span class="panel-label">背景</span>
         <div class="swatches" id="themeSeg">
           <button type="button" data-theme="auto" aria-pressed="false" aria-label="跟随系统" title="跟随系统"></button>
@@ -67,7 +82,10 @@
     </div>
 
     <main class="page" id="page">
-      <p class="meta" id="meta"></p>
+      <div class="reading-meta">
+        <p class="meta" id="meta"></p>
+        <p class="reading-hint">单击单词查看释义；点段末「译文」查看中文（仅该段会发送至微软翻译）</p>
+      </div>
       <article class="article" id="article" lang="en"></article>
       <div class="notes" id="notes" aria-hidden="true"></div>
       <section class="glossary" id="glossary" aria-labelledby="glossaryTitle" hidden>

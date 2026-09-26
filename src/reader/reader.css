@@ -50,7 +50,11 @@
   --font-read: var(--font-serif);
 
   --fs: 20px;
-  --measure: 34em;
+  --measure: 40em;
+  --measure-limit: 800px;
+  --leading: 1.85;
+  --paragraph-gap: 1.6em;
+  --page-pad: 28px;
   --note-w: 228px;
   --note-gap: 44px;
   --shift: 0px;
@@ -123,6 +127,21 @@
   --font-read: var(--font-sans);
 }
 
+:root[data-measure="narrow"] {
+  --measure: 32em;
+  --measure-limit: 680px;
+}
+
+:root[data-measure="wide"] {
+  --measure: 46em;
+  --measure-limit: 960px;
+}
+
+:root[data-spacing="standard"] {
+  --leading: 1.65;
+  --paragraph-gap: 1.3em;
+}
+
 /* ---------- 基础 ---------- */
 
 *,
@@ -145,7 +164,6 @@ body {
   color: var(--text);
   font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
-  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 ::selection {
@@ -317,6 +335,9 @@ button {
   right: 14px;
   z-index: 25;
   width: 300px;
+  max-height: calc(100dvh - 76px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 8px 18px 14px;
   background: var(--card);
   border: 1px solid var(--rule);
@@ -506,36 +527,57 @@ button {
 
 .page {
   position: relative;
-  width: min(100%, calc(var(--measure) + 56px));
+  width: min(100%, calc(min(var(--measure), var(--measure-limit)) + var(--page-pad) * 2));
   margin: 0 auto;
-  padding: 104px 28px 160px;
+  padding: 104px var(--page-pad) 160px;
   font-size: var(--fs);
   transform: translateX(var(--shift));
   transition: transform 0.3s var(--ease);
 }
 
-.meta {
-  margin: 0 0 2.2em;
+.reading-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin-bottom: 32px;
+}
+
+.meta,
+.reading-hint {
+  margin: 0;
   font-family: var(--font-ui);
   font-size: 12.5px;
   letter-spacing: 0.06em;
   color: var(--muted);
 }
 
+.reading-hint {
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+}
+
+.lookup-mode .reading-meta {
+  display: none;
+}
+
 .article {
   font-family: var(--font-read);
   font-size: 1em;
-  line-height: 1.72;
+  line-height: var(--leading);
   color: var(--text);
   font-optical-sizing: auto;
   font-kerning: normal;
   text-rendering: optimizeLegibility;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  hyphens: manual;
+  text-align: start;
   hanging-punctuation: first;
 }
 
 :root[data-font="sans"] .article {
-  line-height: 1.68;
   letter-spacing: 0.002em;
 }
 
@@ -545,8 +587,74 @@ button {
 }
 
 .article p {
-  margin: 0 0 1.05em;
+  margin: 0 0 var(--paragraph-gap);
   text-wrap: pretty;
+  orphans: 2;
+  widows: 2;
+}
+
+.paragraph-translation-toggle {
+  display: inline-flex;
+  vertical-align: baseline;
+  margin-left: 0.55em;
+  border: 0;
+  border-radius: 4px;
+  padding: 0.1em 0.3em;
+  background: transparent;
+  color: var(--soft);
+  font-family: var(--font-ui);
+  font-size: 0.62em;
+  line-height: 1.25;
+  cursor: pointer;
+}
+
+.paragraph-translation-toggle::before {
+  content: '译文';
+}
+
+.paragraph-translation-toggle[data-state='loading']::before {
+  content: '翻译中…';
+}
+
+.paragraph-translation-toggle[data-state='success']::before {
+  content: '收起';
+}
+
+.paragraph-translation-toggle[data-state='collapsed']::before {
+  content: '译文';
+}
+
+.paragraph-translation-toggle[data-state='error']::before {
+  content: '重试翻译';
+}
+
+.paragraph-translation-toggle:hover,
+.paragraph-translation-toggle:focus-visible {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+.paragraph-translation-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.paragraph-translation-toggle[aria-disabled="true"] {
+  color: var(--muted);
+  cursor: wait;
+}
+
+.paragraph-translation-output {
+  margin: calc(-1 * var(--paragraph-gap) + 0.3em) 0 var(--paragraph-gap);
+  padding: 0.7em 0.95em;
+  border-left: 2px solid var(--accent-line);
+  border-radius: 0 4px 4px 0;
+  background: var(--accent-wash);
+  color: var(--soft);
+  font-size: 0.9em;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .article p.small {
@@ -660,16 +768,17 @@ button {
   padding: 1em 1.2em;
   border-radius: 10px;
   background: var(--code-bg);
-  overflow-x: auto;
   font-size: 0.8em;
   line-height: 1.6;
 }
 
+/* 长行折行而不是横向滚动：阅读页里横向滚动条一出现就没有人愿意读下去。 */
 .article pre code {
   padding: 0;
   font-size: 1em;
   background: none;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .article figure {
@@ -761,6 +870,11 @@ button {
   text-decoration-color: var(--accent);
 }
 
+::highlight(lookup-word) {
+  background-color: var(--selection);
+  color: var(--text);
+}
+
 .article :is(h1, h2, h3, h4) .w.rare {
   text-decoration-thickness: 1px;
   text-underline-offset: 0.2em;
@@ -779,7 +893,7 @@ button {
 .notes {
   position: absolute;
   top: 0;
-  left: calc(100% - 28px + var(--note-gap));
+  left: calc(100% - var(--page-pad) + var(--note-gap));
   width: var(--note-w);
   height: 0;
 }
@@ -1152,6 +1266,9 @@ button {
   font-family: var(--font-ui);
   font-size: 14px;
   color: var(--soft);
+  overflow-wrap: anywhere;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
   animation: pop-in 0.14s var(--ease);
 }
 
@@ -1171,6 +1288,7 @@ button {
   font-size: 19px;
   font-weight: 600;
   color: var(--text);
+  min-width: 0;
 }
 
 .pop .defs {
@@ -1350,8 +1468,26 @@ button {
 /* ---------- 窄屏 ---------- */
 
 @media (max-width: 640px) {
+  :root {
+    --page-pad: 20px;
+  }
+
   .page {
-    padding: 88px 20px 120px;
+    padding-top: 88px;
+    padding-bottom: 120px;
+  }
+
+  .reading-meta {
+    margin-bottom: 24px;
+  }
+
+  .article h1 {
+    font-size: 1.5em;
+  }
+
+  .glossary-head {
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .bar {

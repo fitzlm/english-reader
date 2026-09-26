@@ -1,7 +1,7 @@
 // 生词：扫描正文 -> 查词库 -> 按词汇量标记 -> 页边旁注 + 文末生词表 + 释义卡片。
 //
 // 后端返回的是「全部」命中词的有效词频与考纲档位（不止超纲的），所以拖动词汇量时只在本地
-// 重新筛选，不必再请求；双击任意词也能直接给出释义。生词就绪后再请求一次「语境释义」，
+// 重新筛选，不必再请求；单击任意词也能直接给出释义。生词就绪后再请求一次「语境释义」，
 // 回来后把旁注、卡片、生词表里的首要释义换成这个词在句中的意思。
 
 import { ApiError, fetchContextGlosses, fetchGlossary, translateWords } from '../shared/api.js';
@@ -140,6 +140,9 @@ export class Glossary {
     this.rareGroups = [];
     this.layoutMode = 'narrow';
     this.popState = { span: null, group: null, pinned: false, showTimer: 0, hideTimer: 0 };
+    this.lookupVersion = 0;
+    this.lookupHighlight = null;
+    this.press = null;
     this.frame = 0;
     this.ctxTimer = 0;
     this.ctxBlocked = false;
@@ -624,7 +627,9 @@ export class Glossary {
       if (this.popState.pinned) return;
       clearTimeout(this.popState.hideTimer);
       clearTimeout(this.popState.showTimer);
-      this.popState.showTimer = setTimeout(() => this.showCard(span, { pinned: false }), 140);
+      this.popState.showTimer = setTimeout(() => {
+        if (!this.popState.pinned && span.isConnected) this.showCard(span, { pinned: false });
+      }, 140);
     });
     article.addEventListener('mouseout', (event) => {
       const span = event.target.closest && event.target.closest('.w.rare');
@@ -633,23 +638,90 @@ export class Glossary {
       clearTimeout(this.popState.showTimer);
       if (!this.popState.pinned) this.scheduleHide();
     });
-    article.addEventListener('click', (event) => {
-      const span = event.target.closest && event.target.closest('.w.rare');
-      if (!span || event.target.closest('a')) return;
-      clearTimeout(this.popState.showTimer);
-      if (this.popState.pinned && this.popState.span === span) this.hideCard();
-      else this.showCard(span, { pinned: true });
+    article.addEventListener('pointerdown', (event) => {
+      this.press = (event.pointerType === 'touch' || event.button === 0)
+        ? { x: event.clientX, y: event.clientY, target: event.target, pointerId: event.pointerId, pointerType: event.pointerType }
+        : null;
     });
-    article.addEventListener('dblclick', () => this.lookupSelection());
+    article.addEventListener('pointermove', (event) => {
+      if (this.press?.pointerId === event.pointerId && Math.hypot(event.clientX - this.press.x, event.clientY - this.press.y) > (this.press.pointerType === 'touch' ? 8 : 4)) this.press = null;
+    });
+    article.addEventListener('pointercancel', (event) => {
+      if (this.press?.pointerId === event.pointerId) this.press = null;
+    });
+    article.addEventListener('click', (event) => {
+      if (!this.press || this.press.target !== event.target || Math.hypot(event.clientX - this.press.x, event.clientY - this.press.y) > (this.press.pointerType === 'touch' ? 8 : 4)) return;
+      this.press = null;
+      if (event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (event.target.closest('a, button, code, pre, [contenteditable]')) {
+        this.hideCard();
+        return;
+      }
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed) return;
+      const hit = this.wordAtPoint(event.clientX, event.clientY);
+      if (!hit) {
+        this.hideCard();
+        return;
+      }
+      const { range, form, span } = hit;
+      if (this.popState.pinned && this.popState.form === form && this.popState.anchor === range.startContainer && this.popState.start === range.startOffset) {
+        this.hideCard();
+        return;
+      }
+      this.lookupForm(form, range.getBoundingClientRect(), { range, span });
+    });
     pop.addEventListener('mouseenter', () => clearTimeout(this.popState.hideTimer));
     pop.addEventListener('mouseleave', () => {
       if (!this.popState.pinned) this.scheduleHide();
     });
     document.addEventListener('mousedown', (event) => {
       if (pop.hidden || pop.contains(event.target)) return;
-      if (event.target.closest && event.target.closest('.w.rare, .note')) return;
+      if (article.contains(event.target) || (event.target.closest && event.target.closest('.note'))) return;
       this.hideCard();
     });
+  }
+
+  /** 命中单词真实字形范围，避免 caret API 把标点、行尾空白吸到最近的词。 */
+  wordAtPoint(x, y) {
+    const caret = document.caretPositionFromPoint?.(x, y);
+    const legacy = !caret && document.caretRangeFromPoint?.(x, y);
+    const node = caret?.offsetNode || legacy?.startContainer;
+    if (!node || node.nodeType !== Node.TEXT_NODE || !this.dom.article.contains(node)) return null;
+    if (node.parentElement.closest('a, button, code, pre, [contenteditable]')) return null;
+    const text = node.nodeValue || '';
+    const offset = caret?.offset ?? legacy?.startOffset;
+    if (offset == null) return null;
+    const wordChar = (char) => /[A-Za-z'’]/.test(char);
+    let from = offset;
+    let to = offset;
+    // 后端只接受 40 字符以内的词；长串无需扫描或生成昂贵的 DOM Range。
+    while (from > 0 && wordChar(text[from - 1]) && offset - from <= 40) from--;
+    while (to < text.length && wordChar(text[to]) && to - offset <= 40) to++;
+    if ((from > 0 && wordChar(text[from - 1])) || (to < text.length && wordChar(text[to]))) return null;
+    const re = new RegExp(WORD_RE.source, 'g');
+    const nearby = text.slice(from, to);
+    for (let match = re.exec(nearby); match; match = re.exec(nearby)) {
+      const start = from + match.index;
+      const end = start + match[0].length;
+      if (offset < start || offset > end) continue;
+      if (isIdentifierLike(text, start, end)) continue;
+      const range = document.createRange();
+      range.setStart(node, start);
+      range.setEnd(node, end);
+      if (![...range.getClientRects()].some((rect) => x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom)) continue;
+      const form = normalizeForm(match[0]) || match[0].toLowerCase().replace(/[’‘]/g, "'");
+      const span = node.parentElement.closest('.w');
+      return { range, form, span };
+    }
+    return null;
+  }
+
+  setLookupHighlight(range) {
+    if (!CSS.highlights || !window.Highlight) return;
+    CSS.highlights.delete('lookup-word');
+    this.lookupHighlight = range ? new Highlight(range) : null;
+    if (this.lookupHighlight) CSS.highlights.set('lookup-word', this.lookupHighlight);
   }
 
   scheduleHide() {
@@ -659,10 +731,12 @@ export class Glossary {
 
   hideCard() {
     const { pop } = this.dom;
+    this.lookupVersion += 1;
     clearTimeout(this.popState.hideTimer);
     clearTimeout(this.popState.showTimer);
     this.popState.span?.classList.remove('open');
-    this.popState = { ...this.popState, span: null, group: null, pinned: false };
+    this.setLookupHighlight(null);
+    this.popState = { ...this.popState, span: null, group: null, pinned: false, form: null, anchor: null, start: null };
     pop.hidden = true;
   }
 
@@ -674,6 +748,10 @@ export class Glossary {
     const info = this.forms.get(span.dataset.f);
     const group = info && this.groups.get(info.key);
     if (!group) return;
+    this.lookupVersion += 1;
+    clearTimeout(this.popState.showTimer);
+    clearTimeout(this.popState.hideTimer);
+    this.setLookupHighlight(null);
     this.popState.span?.classList.remove('open');
     this.popState = { ...this.popState, span, group, pinned };
     span.classList.add('open');
@@ -739,17 +817,6 @@ export class Glossary {
     pop.style.top = `${Math.round(top + window.scrollY)}px`;
   }
 
-  /** 双击任意词：有数据就直接给释义；词库没有就现场机翻。 */
-  async lookupSelection() {
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return;
-    const raw = selection.toString().trim();
-    if (!/^[A-Za-z]+(?:['’-][A-Za-z]+)*$/.test(raw)) return;
-    const form = normalizeForm(raw);
-    if (!form || !this.data) return;
-    await this.lookupForm(form, selection.getRangeAt(0).getBoundingClientRect());
-  }
-
   /** 只选了一两个词时直接弹出第一个词的卡片：优先生词，其次第一个词。 */
   openFirstCard() {
     const span = this.spans.find((s) => s.classList.contains('rare'));
@@ -765,13 +832,18 @@ export class Glossary {
     this.lookupForm(occ.form, range.getBoundingClientRect());
   }
 
-  async lookupForm(form, rect) {
+  async lookupForm(form, rect, { range = null, span = null } = {}) {
+    const version = ++this.lookupVersion;
+    clearTimeout(this.popState.showTimer);
+    clearTimeout(this.popState.hideTimer);
+    this.setLookupHighlight(range);
     const info = this.forms.get(form);
     const group = info ? this.groups.get(info.key) : null;
     this.popState.span?.classList.remove('open');
-    this.popState = { ...this.popState, span: null, group, pinned: true };
+    this.popState = { ...this.popState, span, group, pinned: true, form, anchor: range?.startContainer, start: range?.startOffset };
+    span?.classList.add('open');
     if (group && (this.hasGloss(group) || !info.missing)) {
-      this.fillCard(group, form, { proper: info.excluded && !info.missing && !(group.lemma && group.lemma.name) });
+      this.fillCard(group, form, { proper: info.excluded && !info.missing && !(group.lemma && group.lemma.name), canMarkKnown: this.isRare(group) });
       this.placeCard(rect);
       return;
     }
@@ -789,12 +861,12 @@ export class Glossary {
       if (!glosses[form]) throw new Error('empty');
       pending.mt = glosses[form];
       if (group) group.mt = pending.mt;
-      if (!this.dom.pop.hidden) {
-        this.fillCard(group || pending, form);
+      if (version === this.lookupVersion && !this.dom.pop.hidden) {
+        this.fillCard(group || pending, form, { canMarkKnown: Boolean(group && this.isRare(group)) });
         this.placeCard(rect);
       }
     } catch (err) {
-      pop.querySelector('.pop-empty')?.replaceWith(el('p', 'pop-empty', '没有找到释义'));
+      if (version === this.lookupVersion) pop.querySelector('.pop-empty')?.replaceWith(el('p', 'pop-empty', '没有找到释义'));
     }
   }
 }

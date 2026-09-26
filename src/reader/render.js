@@ -3,6 +3,8 @@
 // 安全边界：网页内容只经过 textContent / 受限属性（http(s) 链接、http(s)/data:image 图片）
 // 进入扩展页，绝不拼 HTML 字符串——扩展页带着 host 权限，XSS 的代价比普通网页高得多。
 
+import { blocksFromText, isProsePre, splitLongRuns } from '../shared/text.js';
+
 function el(tag, className) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -193,9 +195,18 @@ export function renderBlocks(blocks, root, { onImageLoad = () => {} } = {}) {
         appendListItem(container, block);
         break;
       case 'pre': {
+        const text = block.text || '';
+        // 网页给正文加了 white-space: pre-wrap 的话，抓下来是一段普通文字，
+        // 排成正文比塞进等宽框好读。
+        if (isProsePre(text)) {
+          for (const part of blocksFromText(text)) {
+            container.append(appendRuns(el('p', part.continuation ? 'reading-continuation' : ''), part.runs));
+          }
+          break;
+        }
         const pre = el('pre');
         const code = el('code');
-        code.textContent = block.text || '';
+        code.textContent = text;
         pre.append(code);
         container.append(pre);
         break;
@@ -214,8 +225,14 @@ export function renderBlocks(blocks, root, { onImageLoad = () => {} } = {}) {
       case 'table':
         container.append(renderTable(block));
         break;
-      default:
-        container.append(appendRuns(el('p', block.small ? 'small' : ''), block.runs));
+      default: {
+        const groups = block.t === 'p' && !block.small
+          ? splitLongRuns(block.runs || []) : [block.runs];
+        groups.forEach((runs, index) => {
+          const className = block.small ? 'small' : (index > 0 || block.continuation ? 'reading-continuation' : '');
+          container.append(appendRuns(el('p', className), runs));
+        });
+      }
     }
   }
 }

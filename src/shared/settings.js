@@ -7,6 +7,8 @@ export const DEFAULTS = Object.freeze({
   theme: 'auto', // auto | paper | sepia | night
   fontSize: 20,
   font: 'serif', // serif | sans
+  measure: 'comfortable', // narrow | comfortable | wide
+  spacing: 'relaxed', // standard | relaxed
   contextGloss: true, // 结合上下文给出生词在句中的意思（消耗 AI 次数）
 });
 
