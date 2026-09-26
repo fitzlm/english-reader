@@ -1,0 +1,11 @@
+import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
+  testDir: 'tests/e2e',
+  testMatch: /.*\.spec\.mjs/,
+  timeout: 60000,
+  expect: { timeout: 8000 },
+  workers: 1,
+  reporter: [['list']],
+  outputDir: 'test-results/artifacts',
+});

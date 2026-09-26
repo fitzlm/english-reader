@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>静读</title>
+    <link rel="stylesheet" href="reader.css" />
+    <script type="module" src="reader.js"></script>
+  </head>
+  <body>
+    <div class="progress" aria-hidden="true"><div class="progress-bar" id="progress"></div></div>
+
+    <header class="bar" id="bar">
+      <a class="source" id="source" target="_blank" rel="noopener noreferrer">
+        <img class="source-icon" id="sourceIcon" alt="" width="16" height="16" hidden />
+        <span class="source-name" id="sourceName"></span>
+      </a>
+      <div class="bar-actions">
+        <button class="chip" id="countChip" type="button" hidden>
+          <span class="chip-dot" aria-hidden="true"></span><span id="countText"></span>
+        </button>
+        <button class="tool" id="typeBtn" type="button" aria-label="排版与词汇量" aria-expanded="false" aria-controls="panel" title="排版与词汇量">
+          <span class="tool-aa">Aa</span>
+        </button>
+        <button class="tool" id="closeBtn" type="button" aria-label="关闭" title="关闭（Esc）">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="panel" id="panel" role="dialog" aria-label="排版与词汇量" hidden>
+      <div class="panel-row">
+        <span class="panel-label">字号</span>
+        <div class="stepper">
+          <button type="button" id="smaller" aria-label="缩小字号">A</button>
+          <span id="sizeValue">20</span>
+          <button type="button" id="larger" aria-label="放大字号">A</button>
+        </div>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">字体</span>
+        <div class="segmented" id="fontSeg">
+          <button type="button" data-font="serif" aria-pressed="false">衬线</button>
+          <button type="button" data-font="sans" aria-pressed="false">无衬线</button>
+        </div>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">背景</span>
+        <div class="swatches" id="themeSeg">
+          <button type="button" data-theme="auto" aria-pressed="false" aria-label="跟随系统" title="跟随系统"></button>
+          <button type="button" data-theme="paper" aria-pressed="false" aria-label="纸白" title="纸白"></button>
+          <button type="button" data-theme="sepia" aria-pressed="false" aria-label="米黄" title="米黄"></button>
+          <button type="button" data-theme="night" aria-pressed="false" aria-label="夜间" title="夜间"></button>
+        </div>
+      </div>
+      <div class="panel-row panel-vocab">
+        <div class="vocab-head">
+          <label class="panel-label" for="vocabRange">我的词汇量</label>
+          <span class="vocab-value" id="vocabValue">3,000</span>
+        </div>
+        <input type="range" id="vocabRange" min="0" max="17" step="1" />
+        <p class="vocab-hint" id="vocabHint"></p>
+      </div>
+      <a class="panel-more" id="moreSettings" href="#">账号与更多设置 →</a>
+    </div>
+
+    <main class="page" id="page">
+      <p class="meta" id="meta"></p>
+      <article class="article" id="article" lang="en"></article>
+      <div class="notes" id="notes" aria-hidden="true"></div>
+      <section class="glossary" id="glossary" aria-labelledby="glossaryTitle" hidden>
+        <header class="glossary-head">
+          <h2 id="glossaryTitle">生词</h2>
+          <p class="glossary-sub" id="glossarySub"></p>
+        </header>
+        <ol class="glossary-list" id="glossaryList"></ol>
+        <p class="glossary-state" id="glossaryState" role="status"></p>
+      </section>
+    </main>
+
+    <div class="pop" id="pop" role="dialog" aria-live="polite" hidden></div>
+  </body>
+</html>

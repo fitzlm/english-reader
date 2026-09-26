@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>The Quiet Resilience of Night Markets | The Daily Ledger</title>
+    <meta property="og:site_name" content="The Daily Ledger" />
+    <link rel="icon" href="data:," />
+    <style>
+      /* 故意做成拥挤的新闻站：小字号、超长行、侧栏广告、顶栏菜单 */
+      body { margin: 0; font: 14px/1.35 Arial, sans-serif; color: #222; background: #fff; }
+      .top { background: #0b3d91; color: #fff; padding: 10px 16px; display: flex; gap: 18px; }
+      .top a { color: #fff; }
+      .cookie { position: fixed; bottom: 0; left: 0; right: 0; background: #333; color: #fff; padding: 12px; font-size: 12px; }
+      .layout { display: flex; gap: 20px; padding: 16px; }
+      .main { flex: 1; }
+      .side { width: 280px; background: #f4f4f4; padding: 10px; font-size: 12px; }
+      .ad { background: #ffeb3b; padding: 30px; margin-bottom: 12px; text-align: center; }
+      .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      .byline { color: #777; font-size: 12px; }
+      .share { margin: 8px 0; }
+      img { max-width: 100%; }
+      table { border-collapse: collapse; }
+      td, th { border: 1px solid #ccc; padding: 4px 8px; }
+    </style>
+  </head>
+  <body>
+    <nav class="top"><a href="#">World</a><a href="#">Business</a><a href="#">Culture</a><a href="#">Opinion</a></nav>
+    <div class="layout">
+      <main class="main">
+        <article id="story">
+          <h1 id="title">The Quiet Resilience of Night Markets</h1>
+          <p class="byline">By Dana Whitfield · September 26, 2026</p>
+          <div class="share"><button>Share</button><button>Save</button></div>
+          <p id="first">
+            Every evening, as the office towers empty, a different city unfolds along the side streets. Folding tables
+            appear, lanterns flicker on, and the <em>clatter</em> of woks rises into a cheerful cacophony. For a few
+            hours, the pavement becomes a labyrinth of stalls selling grilled squid, sugarcane juice and secondhand
+            paperbacks.<sup class="reference"><a href="#fn1">[1]</a></sup>
+            <span style="display:none">HIDDEN-TEXT-SHOULD-NOT-APPEAR</span>
+          </p>
+          <p>
+            Dr. Mei Garnett, who has studied informal economies in Taipei and Bangkok for two decades, says the appeal
+            is partly ephemeral: “People come because they know it won’t last. The market is dismantled before dawn,
+            and that impermanence makes every visit feel like a small act of serendipity.”
+            <a href="https://example.com/study">Read the full study<span class="sr-only"> (opens in a new window)</span></a>.
+          </p>
+          <aside class="ad">Advertisement — Subscribe for $1 a week</aside>
+          <h2>Why Ephemeral Markets Endure</h2>
+          <p>
+            Municipal officials have not always been fond of the arrangement. Over the years, relentless ordinances
+            have tried to relocate vendors into sprawling indoor food halls, where rents are higher and the aroma of
+            sizzling garlic is filtered through ventilation ducts. Yet the vendors keep returning, and customers keep
+            following them. Planners at NASA-style control rooms could hardly design logistics this meticulous.
+          </p>
+          <figure>
+            <img src="market.png" alt="Lanterns above a crowded night market" width="1200" height="640" />
+            <figcaption>Lanterns glow above a crowded lane shortly after sunset.</figcaption>
+          </figure>
+          <blockquote>
+            <p>
+              We don’t own anything here except our recipes and our regulars. That’s enough to start again anywhere.
+            </p>
+          </blockquote>
+          <p>Vendors told us the secret is a handful of habits:</p>
+          <ul>
+            <li>They improvise when the weather turns, sharing tarpaulins and extension cords.</li>
+            <li>
+              They keep prices transparent, which builds trust with regulars.
+              <ul>
+                <li>Hand-written boards are updated every night.</li>
+              </ul>
+            </li>
+            <li>They coordinate closing times so the street is spotless by morning.</li>
+          </ul>
+          <ol>
+            <li>Arrive before seven.</li>
+            <li>Bring small change.</li>
+          </ol>
+          <p>A typical stall tracks its stock with a tiny script such as <code>count_skewers()</code>:</p>
+          <pre><code>def count_skewers(stock):
+    return sum(item.quantity for item in stock)</code></pre>
+          <table>
+            <thead><tr><th>City</th><th>Stalls</th></tr></thead>
+            <tbody>
+              <tr><td>Taipei</td><td>312</td></tr>
+              <tr><td>Bangkok</td><td>458</td></tr>
+            </tbody>
+          </table>
+          <p id="last">
+            Whether the markets survive gentrification is an open question. For now, the benefits are obvious to anyone
+            who has lingered there: cheap food, nostalgic music and a rare sense of belonging.
+          </p>
+        </article>
+      </main>
+      <aside class="side">
+        <div class="ad">Advertisement</div>
+        <div class="ad">Advertisement</div>
+        <p>Most read: 10 ways to save money on groceries</p>
+      </aside>
+    </div>
+    <div class="cookie">We use cookies to improve your experience. <button>Accept</button></div>
+    <p id="fn1" style="padding: 16px">[1] Field notes, 2025.</p>
+  </body>
+</html>

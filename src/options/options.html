@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LinguiPro 静读</title>
+    <link rel="icon" href="../../icons/icon-32.png" />
+    <link rel="stylesheet" href="options.css" />
+    <script type="module" src="options.js"></script>
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="hero">
+        <img class="logo" src="../../icons/icon-128.png" alt="" width="56" height="56" />
+        <h1>静读</h1>
+        <p class="tagline">把网页上的英文，排成一本好书。</p>
+        <p class="lede">
+          选中一段英文，右键选择<strong>「用静读打开」</strong>，或者按 <kbd id="shortcutKeys">⌥⇧R</kbd>。
+          版面会换成适合长读的字体与行距，超出你词汇量的生词会被轻轻标出，释义就写在页边。
+        </p>
+      </header>
+
+      <section class="try" aria-labelledby="tryTitle">
+        <p class="try-label" id="tryTitle"><span class="step">试一试</span>选中下面这段文字，右键 →「用静读打开」</p>
+        <div class="sample" lang="en">
+          <p>
+            Every city has its own rhythm. In the early morning, before the traffic swells, you can hear the quiet
+            persistence of street sweepers and the faint clatter of cafés rolling up their shutters. Urban planners
+            call this the city’s metabolism — an intricate, largely invisible choreography that keeps millions of
+            people fed, sheltered and moving.
+          </p>
+          <p>
+            When a storm or a blackout disrupts it, the most resilient neighborhoods are rarely the wealthiest. They
+            are the ones where people know their neighbors, share what they have, and improvise together.
+          </p>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="vocabTitle">
+        <div class="card-head">
+          <h2 id="vocabTitle">我的词汇量</h2>
+          <output class="vocab-number" id="vocabNumber" for="vocabRange">3,000</output>
+        </div>
+        <input type="range" id="vocabRange" min="0" max="17" step="1" aria-labelledby="vocabTitle" />
+        <div class="presets" id="presets" role="group" aria-label="常见考试的词汇量"></div>
+        <p class="hint">词频排名在这之后的词会被标为生词。不确定的话，先选一个接近的档位，读的时候在阅读页右上角的 Aa 里随时微调。</p>
+        <p class="account-vocab" id="accountVocab" hidden></p>
+      </section>
+
+      <section class="card" aria-labelledby="accountTitle">
+        <div class="card-head">
+          <h2 id="accountTitle">LinguiPro 账号</h2>
+          <span class="badge" id="accountBadge">游客</span>
+        </div>
+        <div id="guestView">
+          <p class="hint">不登录也能用，释义来自 LinguiPro 词库。登录后可以同步你在 LinguiPro 里测出的词汇量。</p>
+          <p class="notice" id="expiredNotice" hidden>登录已过期，请重新登录。</p>
+          <form class="login" id="loginForm" autocomplete="on">
+            <input id="identifier" name="username" type="text" placeholder="用户名或邮箱" autocomplete="username" required />
+            <input id="password" name="password" type="password" placeholder="密码" autocomplete="current-password" required />
+            <button type="submit" id="loginBtn">登录</button>
+          </form>
+          <p class="form-error" id="loginError" role="alert"></p>
+        </div>
+        <div id="userView" hidden>
+          <p class="signed-in">已登录 <strong id="userName"></strong></p>
+          <button type="button" class="link" id="logoutBtn">退出登录</button>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="keysTitle">
+        <div class="card-head">
+          <h2 id="keysTitle">快捷键</h2>
+        </div>
+        <p class="hint">
+          <kbd id="shortcutKeys2">⌥⇧R</kbd> 用静读打开选中的文字。点击工具栏上的静读图标也可以。
+          <button type="button" class="link" id="shortcutsBtn">修改快捷键</button>
+        </p>
+      </section>
+
+      <details class="advanced">
+        <summary>高级设置</summary>
+        <label class="field" for="apiBase">服务器地址</label>
+        <div class="field-row">
+          <input id="apiBase" type="url" spellcheck="false" />
+          <button type="button" id="apiSave">保存</button>
+          <button type="button" class="link" id="apiReset">恢复默认</button>
+        </div>
+        <p class="form-error" id="apiError" role="alert"></p>
+      </details>
+
+      <footer class="foot">释义与词频来自 LinguiPro 词库 · 正文字体 Literata，音标字体 Charis SIL</footer>
+    </main>
+  </body>
+</html>

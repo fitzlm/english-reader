@@ -1,0 +1,16 @@
+{
+  "name": "linguipro-reader",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "LinguiPro 静读：Chrome 插件，选中英文后排成舒服的阅读版式并按词汇量标出生词",
+  "scripts": {
+    "test": "node --test tests/unit/*.test.mjs",
+    "e2e": "playwright test",
+    "icons": "node scripts/make-icons.mjs",
+    "package": "node scripts/package.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1"
+  }
+}
