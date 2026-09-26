@@ -1,6 +1,6 @@
 import { Glossary } from './glossary.js';
 import { countWords, renderBlocks } from './render.js';
-import { FONT_SIZES, loadSettings, onSettingsChanged, saveSettings } from '../shared/settings.js';
+import { FONT_SIZES, loadKnownWords, loadSettings, onSettingsChanged, saveSettings } from '../shared/settings.js';
 import { VOCAB_STOPS, blocksFromText, formatNumber, nearestStopIndex, readingMinutes } from '../shared/text.js';
 
 const $ = (id) => document.getElementById(id);
@@ -34,6 +34,9 @@ const dom = {
   list: $('glossaryList'),
   state: $('glossaryState'),
   pop: $('pop'),
+  toast: $('toast'),
+  toastText: $('toastText'),
+  toastUndo: $('toastUndo'),
 };
 
 const inFrame = window.top !== window;
@@ -143,8 +146,32 @@ function showBar() {
 // ---------- 生词状态 ----------
 
 function onGlossaryStatus(next) {
-  status = { ...status, ...next };
+  const { toast, ...rest } = next;
+  if (toast) showToast(toast);
+  status = { ...status, ...rest };
   renderStatus();
+}
+
+let toastTimer = 0;
+let toastUndo = null;
+
+/** 底部轻提示，带一个撤销按钮，4 秒后自动消失。 */
+function showToast({ text, undo }) {
+  clearTimeout(toastTimer);
+  dom.toastText.textContent = text;
+  toastUndo = undo || null;
+  dom.toastUndo.hidden = !undo;
+  dom.toast.hidden = false;
+  requestAnimationFrame(() => dom.toast.classList.add('in'));
+  toastTimer = setTimeout(hideToast, 4000);
+}
+
+function hideToast() {
+  clearTimeout(toastTimer);
+  dom.toast.classList.remove('in');
+  toastTimer = setTimeout(() => {
+    dom.toast.hidden = true;
+  }, 200);
 }
 
 function renderStatus() {
@@ -179,6 +206,12 @@ function renderStatus() {
       dom.vocabHint.textContent += ` · 本文 ${count} 个`;
     } else {
       dom.state.textContent = `没有超出 ${vocab} 词汇量的词。觉得太少？在右上角 Aa 里调低词汇量。`;
+    }
+    if (status.ctxNotice) {
+      const notice = document.createElement('span');
+      notice.className = 'ctx-notice';
+      notice.textContent = status.ctxNotice;
+      dom.state.append(notice);
     }
   }
 }
@@ -231,6 +264,11 @@ function bindControls() {
     dom.glossary.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
   dom.closeBtn.addEventListener('click', closeReader);
+  dom.toastUndo.addEventListener('click', () => {
+    const undo = toastUndo;
+    hideToast();
+    if (undo) undo();
+  });
 
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
@@ -326,7 +364,7 @@ async function main() {
 
   glossary = new Glossary(
     { article: dom.article, notes: dom.notes, list: dom.list, page: dom.page, pop: dom.pop },
-    { vocab: settings.vocab, onStatus: onGlossaryStatus },
+    { vocab: settings.vocab, known: await loadKnownWords(), contextGloss: settings.contextGloss, onStatus: onGlossaryStatus },
   );
   glossary.scan();
   dom.article.classList.add('reveal');

@@ -4,6 +4,10 @@ import { test } from 'node:test';
 import {
   VOCAB_STOPS,
   blocksFromText,
+  difficultyOf,
+  isIdentifierLike,
+  isMarkableForm,
+  sentenceAt,
   isMostlyUpper,
   isProperNoun,
   isSentenceStart,
@@ -110,4 +114,51 @@ test('短释义：取前两个词性、每个前三个义项', () => {
   assert.equal(shortGloss(defs), '能复原的；弹回的，有弹性的；能立刻恢复精神的；弹性');
   assert.equal(shortGloss(defs, { maxDefs: 1, maxSenses: 2 }), '能复原的；弹回的，有弹性的');
   assert.equal(shortGloss(null), '');
+});
+
+test('标识符形态的词不参与生词判断', () => {
+  const at = (text, word) => {
+    const start = text.indexOf(word);
+    return isIdentifierLike(text, start, start + word.length);
+  };
+  assert.equal(at('Node.js is great', 'js'), true);
+  assert.equal(at('visit example.com today', 'example'), true);
+  assert.equal(at('call getElementById now', 'getElementById'), true);
+  assert.equal(at('the foo_bar value', 'bar'), true);
+  assert.equal(at('run count() first', 'count'), true);
+  assert.equal(at('a 3D model', 'D'), true);
+  assert.equal(at('a well-known fact.', 'known'), false);
+  assert.equal(at('It ended. Then', 'ended'), false);
+  assert.equal(at('the end.', 'end'), false);
+  // 外文词被 ASCII 分词拆出的碎片
+  assert.equal(at('the island of Haladvīpa today', 'Haladv'), true);
+  assert.equal(at('a small café nearby', 'caf'), true);
+  // 中文里夹的英文单词照常参与
+  assert.equal(at('我用English写作', 'English'), false);
+});
+
+test('难度取词频与考纲档位的较小者', () => {
+  assert.equal(difficultyOf(4556, 1600), 1600);
+  assert.equal(difficultyOf(null, 3500), 3500);
+  assert.equal(difficultyOf(12000, null), 12000);
+  assert.equal(difficultyOf(null, null), null);
+});
+
+test('取出包含某个位置的句子', () => {
+  const text = 'First sentence here. The market is dismantled before dawn! Last one?';
+  const offset = text.indexOf('dismantled');
+  assert.equal(sentenceAt(text, offset), 'The market is dismantled before dawn!');
+  assert.equal(sentenceAt('No punctuation at all', 3), 'No punctuation at all');
+  const long = `${'word '.repeat(200)}target ${'word '.repeat(200)}.`;
+  const clipped = sentenceAt(long, long.indexOf('target'), 100);
+  assert.ok(clipped.length <= 100);
+  assert.ok(clipped.includes('target'));
+});
+
+test('括号不算句首；两字母与常见缩写不标', () => {
+  assert.equal(isSentenceStart('('), false);
+  assert.equal(isProperNoun([occ('Ceylon', { sentenceStart: isSentenceStart('(') })]), true);
+  assert.equal(isMarkableForm('pa'), false);
+  assert.equal(isMarkableForm('etc'), false);
+  assert.equal(isMarkableForm('ephemeral'), true);
 });

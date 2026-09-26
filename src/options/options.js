@@ -1,4 +1,13 @@
-import { DEFAULT_API_BASE, getApiBase, loadSettings, onSettingsChanged, saveSettings } from '../shared/settings.js';
+import {
+  DEFAULT_API_BASE,
+  clearKnownWords,
+  getApiBase,
+  loadKnownWords,
+  loadSettings,
+  onSettingsChanged,
+  saveSettings,
+  setWordKnown,
+} from '../shared/settings.js';
 import { VOCAB_STOPS, formatNumber, nearestStopIndex } from '../shared/text.js';
 import { fetchAccountVocab, fetchMe, getAuth, login, logout } from '../shared/api.js';
 
@@ -81,6 +90,59 @@ async function showAccountVocab({ adopt = false } = {}) {
   });
   line.append(' ', use);
   line.hidden = false;
+}
+
+// ---------- 语境释义 ----------
+
+function bindContextToggle() {
+  const toggle = $('ctxToggle');
+  toggle.checked = settings.contextGloss !== false;
+  toggle.addEventListener('change', () => {
+    settings.contextGloss = toggle.checked;
+    saveSettings({ contextGloss: toggle.checked });
+  });
+}
+
+// ---------- 认识的词 ----------
+
+const KNOWN_SHOWN = 300;
+
+async function renderKnown() {
+  const words = [...(await loadKnownWords())].sort((a, b) => a.localeCompare(b));
+  $('knownCount').textContent = `${formatNumber(words.length)} 个`;
+  $('knownClear').hidden = words.length === 0;
+  $('knownHint').textContent = words.length
+    ? '这些词不会再被标出。点一个词可以把它放回生词。'
+    : '在阅读页的释义卡片里点「认识了」，这个词以后就不会再被标出。';
+  const box = $('knownList');
+  box.textContent = '';
+  for (const word of words.slice(0, KNOWN_SHOWN)) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.textContent = word;
+    chip.title = `把 ${word} 放回生词`;
+    chip.addEventListener('click', async () => {
+      await setWordKnown(word, false);
+      renderKnown();
+    });
+    box.append(chip);
+  }
+  if (words.length > KNOWN_SHOWN) {
+    const more = document.createElement('span');
+    more.className = 'hint';
+    more.textContent = `… 还有 ${formatNumber(words.length - KNOWN_SHOWN)} 个`;
+    box.append(more);
+  }
+}
+
+function bindKnown() {
+  $('knownClear').addEventListener('click', async () => {
+    await clearKnownWords();
+    renderKnown();
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && 'known' in changes) renderKnown();
+  });
 }
 
 // ---------- 账号 ----------
@@ -187,6 +249,9 @@ async function main() {
     settings = { ...settings, ...patch };
     renderVocab();
   });
+  bindContextToggle();
+  bindKnown();
+  renderKnown();
   bindAccount();
   await renderAccount();
   renderShortcut();

@@ -40,9 +40,14 @@ test('选中文章 -> 阅读层：版式干净、生词标出、旁注与生词�
   for (const word of ['clatter', 'cacophony', 'labyrinth', 'ephemeral', 'dismantled', 'impermanence', 'municipal', 'meticulous']) {
     expect(rare, word).toContain(word);
   }
-  for (const word of ['garnett', 'nasa', 'benefits', 'regulars', 'taipei', 'bangkok', 'the', 'market']) {
+  for (const word of ['garnett', 'nasa', 'benefits', 'regulars', 'taipei', 'bangkok', 'the', 'market', 'manage']) {
     expect(rare, word).not.toContain(word);
   }
+  // 标识符形态的词不参与：Node.js 的 js、example.com 的 example
+  await expect(frame.locator('.w[data-f="js"]')).toHaveCount(0);
+  await expect(frame.locator('.w[data-f="example"]')).toHaveCount(0);
+  // 没有词频但有考纲档位（高中 3500）的词：3000 词汇量下算生词
+  expect(rare).toContain('website');
   // 词库没有的词走机翻
   await expect(frame.locator('.w.rare[data-f="serendipity"]')).toHaveCount(1);
   expect(calls.translate).toBeGreaterThan(0);
@@ -52,6 +57,13 @@ test('选中文章 -> 阅读层：版式干净、生词标出、旁注与生词�
   await expect(entries).toHaveCount(groups.size);
   await expect(frame.locator('.note')).toHaveCount(groups.size);
   await expect(frame.locator('#glossaryList .entry').first().locator('.entry-word')).toHaveText('lantern');
+
+  // 语境释义：旁注换成句中义，卡片与生词表首行带「语境」标签；请求里带着原句
+  await expect(frame.locator('.note[data-k="clatter"]')).toContainText('（锅铲的）叮当声');
+  const clatterItem = calls.contextItems.find((it) => it.key === 'clatter');
+  expect(clatterItem.sentence).toContain('the clatter of woks rises into a cheerful cacophony.');
+  await expect(frame.locator('#glossaryList .entry[data-k="clatter"] .defs li.ctx')).toContainText('（锅铲的）叮当声');
+  expect(calls.context).toBe(1);
 
   await page.waitForTimeout(400);
   await page.screenshot({ path: path.join(SHOTS, '01-reader-paper.png') });
@@ -86,6 +98,21 @@ test('交互：释义卡片、排版面板、词汇量、主题、窄屏、Esc �
   expect(Math.abs(popBox.x - wordBox.x)).toBeLessThan(120);
   await page.waitForTimeout(350);
   await page.screenshot({ path: path.join(SHOTS, '03-hover-card.png') });
+
+  await expect(pop.locator('li.ctx')).toContainText('转瞬即逝的');
+
+  // 「认识了」：移出生词、底部可撤销、写入存储
+  await pop.locator('.pop-known').click();
+  await expect(frame.locator('.w.rare[data-f="ephemeral"]')).toHaveCount(0);
+  await expect(frame.locator('#toast')).toBeVisible();
+  await expect(frame.locator('#toastText')).toHaveText('已移出生词：ephemeral');
+  await expect.poll(async () => (await serviceWorker.evaluate(() => chrome.storage.local.get('known'))).known).toContain('ephemeral');
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: path.join(SHOTS, '03b-known-toast.png') });
+  await frame.locator('#toastUndo').click();
+  // 正文与小标题各一处，撤销后两处都恢复
+  await expect(frame.locator('.w.rare[data-f="ephemeral"]')).toHaveCount(2);
+  await expect.poll(async () => (await serviceWorker.evaluate(() => chrome.storage.local.get('known'))).known).not.toContain('ephemeral');
 
   // 双击一个常用词：也能查
   await frame.locator('#article p').first().dblclick({ position: { x: 30, y: 12 } });
@@ -151,4 +178,30 @@ test('交互：释义卡片、排版面板、词汇量、主题、窄屏、Esc �
   await page.keyboard.press('Escape');
   await expect(page.locator('linguipro-reader')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => document.documentElement.style.overflow)).toBe('');
+});
+
+test('设置页：词汇量档位、语境开关、认识的词', async ({ context, serviceWorker, extensionId }) => {
+  await serviceWorker.evaluate(() => chrome.storage.local.set({ known: ['ephemeral', 'labyrinth'] }));
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/src/options/options.html`);
+  await expect(page.locator('#vocabNumber')).toHaveText('3,000');
+  await page.locator('#presets button', { hasText: '六级' }).click();
+  await expect(page.locator('#vocabNumber')).toHaveText('6,000');
+  await expect.poll(async () => (await serviceWorker.evaluate(() => chrome.storage.sync.get('vocab'))).vocab).toBe(6000);
+
+  await expect(page.locator('#ctxToggle')).toBeChecked();
+  await page.locator('.switch').click();
+  await expect.poll(async () => (await serviceWorker.evaluate(() => chrome.storage.sync.get('contextGloss'))).contextGloss).toBe(false);
+
+  await expect(page.locator('#ctxToggle')).not.toBeChecked();
+  await expect(page.locator('#knownCount')).toHaveText('2 个');
+  await page.waitForTimeout(300);
+  // 关掉之后开关必须是灰色轨道、圆点在左
+  const track = await page.locator('.switch-track').evaluate((node) => getComputedStyle(node).backgroundColor);
+  expect(track).not.toBe('rgb(178, 90, 44)');
+  await page.screenshot({ path: path.join(SHOTS, '08-options.png'), fullPage: true });
+  await page.locator('#knownList button', { hasText: 'labyrinth' }).click();
+  await expect(page.locator('#knownCount')).toHaveText('1 个');
+  await page.locator('#knownClear').click();
+  await expect(page.locator('#knownCount')).toHaveText('0 个');
 });

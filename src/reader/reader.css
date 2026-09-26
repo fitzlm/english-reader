@@ -73,7 +73,7 @@
   --accent: #b25a2c;
   --accent-line: rgba(178, 90, 44, 0.42);
   --accent-wash: rgba(178, 90, 44, 0.1);
-  --link-line: rgba(43, 41, 38, 0.28);
+  --link: #3d6180;
   --note: #7c766b;
   --shadow: 0 18px 40px -16px rgba(60, 45, 25, 0.28), 0 2px 6px rgba(60, 45, 25, 0.06);
   --selection: rgba(178, 90, 44, 0.18);
@@ -93,7 +93,7 @@
   --accent: #a4502a;
   --accent-line: rgba(164, 80, 42, 0.42);
   --accent-wash: rgba(164, 80, 42, 0.11);
-  --link-line: rgba(58, 47, 34, 0.3);
+  --link: #3f5f78;
   --note: #7f6f59;
   --shadow: 0 18px 40px -16px rgba(80, 55, 20, 0.3), 0 2px 6px rgba(80, 55, 20, 0.07);
   --selection: rgba(164, 80, 42, 0.2);
@@ -113,7 +113,7 @@
   --accent: #e3a06b;
   --accent-line: rgba(227, 160, 107, 0.45);
   --accent-wash: rgba(227, 160, 107, 0.13);
-  --link-line: rgba(221, 214, 202, 0.3);
+  --link: #95b5cf;
   --note: #9d968a;
   --shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.3);
   --selection: rgba(227, 160, 107, 0.26);
@@ -549,6 +549,19 @@ button {
   text-wrap: pretty;
 }
 
+.article p.small {
+  font-family: var(--font-ui);
+  font-size: 0.7em;
+  line-height: 1.65;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  margin-bottom: 1.8em;
+}
+
+.article h1 + p.small {
+  margin-top: -0.4em;
+}
+
 .article h1,
 .article h2,
 .article h3,
@@ -587,17 +600,20 @@ button {
   font-weight: 640;
 }
 
+/* 下划线留给生词专用：链接只用一个安静的蓝灰色区分，悬停才出下划线 */
 .article a {
-  color: inherit;
-  text-decoration: underline;
-  text-decoration-color: var(--link-line);
-  text-decoration-thickness: 1px;
+  color: var(--link);
+  text-decoration: none;
   text-underline-offset: 0.2em;
-  transition: text-decoration-color 0.15s ease;
+  text-decoration-thickness: 1px;
 }
 
 .article a:hover {
-  text-decoration-color: currentColor;
+  text-decoration-line: underline;
+}
+
+.article :is(h1, h2, h3, h4) a {
+  color: inherit;
 }
 
 .article blockquote {
@@ -1021,6 +1037,83 @@ button {
   text-align: center;
 }
 
+/* 语境义：放在释义第一行，用一个小标签区分于词典义项 */
+.defs li.ctx {
+  color: var(--text);
+}
+
+.defs li.dict {
+  color: var(--muted);
+  font-size: 0.94em;
+}
+
+.ctx-tag {
+  display: inline-block;
+  margin-right: 0.5em;
+  padding: 0 0.42em;
+  border-radius: 4px;
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-size: 0.78em;
+  line-height: 1.7;
+  vertical-align: 0.08em;
+  letter-spacing: 0.04em;
+}
+
+.entry-tail {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.entry-tail .entry-rank {
+  margin-left: 0;
+}
+
+.known-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.entry:hover .known-btn,
+.known-btn:focus-visible {
+  opacity: 1;
+}
+
+.known-btn:hover {
+  color: var(--accent);
+  background: var(--accent-wash);
+}
+
+.known-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+@media (hover: none) {
+  .known-btn {
+    opacity: 0.7;
+  }
+}
+
+.ctx-notice {
+  display: block;
+  margin-top: 0.4em;
+  font-size: 12px;
+}
+
 /* ---------- 释义卡片 ---------- */
 
 .pop {
@@ -1073,12 +1166,88 @@ button {
 }
 
 .pop-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
   margin: 0.7em 0 0;
   padding-top: 0.6em;
   border-top: 1px solid var(--rule);
   font-size: 11.5px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+.pop-known {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  height: 24px;
+  padding: 0 9px 0 7px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--soft);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.pop-known svg {
+  width: 13px;
+  height: 13px;
+}
+
+.pop-known:hover {
+  color: var(--accent);
+  border-color: var(--accent-line);
+  background: var(--accent-wash);
+}
+
+/* ---------- 底部提示 ---------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px 10px 18px;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 13.5px;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  transition: opacity 0.18s ease, transform 0.18s var(--ease);
+}
+
+.toast[hidden] {
+  display: none;
+}
+
+.toast.in {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.toast button {
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 18%, transparent);
+  color: var(--bg);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.toast button:hover {
+  background: color-mix(in srgb, var(--bg) 28%, transparent);
 }
 
 .pop-empty {

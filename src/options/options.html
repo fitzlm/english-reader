@@ -47,6 +47,30 @@
         <p class="account-vocab" id="accountVocab" hidden></p>
       </section>
 
+      <section class="card" aria-labelledby="ctxTitle">
+        <div class="card-head">
+          <h2 id="ctxTitle">语境释义</h2>
+          <label class="switch" title="语境释义">
+            <input type="checkbox" id="ctxToggle" />
+            <span class="switch-track" aria-hidden="true"></span>
+          </label>
+        </div>
+        <p class="hint">
+          词典给的往往是一串义项。打开后，生词整理好会再请 AI 读一遍原句，告诉你它<strong>在这句话里</strong>的意思，旁注和卡片里标着「语境」。
+          每打开一次阅读消耗 1 次 LinguiPro 的 AI 次数，用完当天自动改用词典释义。
+        </p>
+      </section>
+
+      <section class="card" aria-labelledby="knownTitle">
+        <div class="card-head">
+          <h2 id="knownTitle">认识的词</h2>
+          <span class="badge" id="knownCount">0 个</span>
+        </div>
+        <p class="hint" id="knownHint">在阅读页的释义卡片里点「认识了」，这个词以后就不会再被标出。</p>
+        <div class="known-list" id="knownList"></div>
+        <button type="button" class="link" id="knownClear" hidden>全部清空</button>
+      </section>
+
       <section class="card" aria-labelledby="accountTitle">
         <div class="card-head">
           <h2 id="accountTitle">LinguiPro 账号</h2>

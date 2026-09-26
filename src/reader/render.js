@@ -103,11 +103,45 @@ function renderImage(block, onLoad) {
   return figure;
 }
 
+function blockText(block) {
+  return (block.runs || []).map((r) => r.text || '').join('');
+}
+
+/**
+ * 原网页里比正文明显小的短段落（署名、日期行、图片来源、脚注）标成 small，
+ * 阅读页里用小号辅助文字呈现，保住原来的信息层级。正文字号取按字数加权的中位数。
+ */
+export function markSmallBlocks(blocks) {
+  const samples = [];
+  for (const block of blocks) {
+    if ((block.t === 'p' || block.t === 'li') && block.fs > 0) {
+      samples.push({ fs: block.fs, weight: blockText(block).length });
+    }
+  }
+  const total = samples.reduce((sum, s) => sum + s.weight, 0);
+  if (!total) return blocks;
+  samples.sort((a, b) => a.fs - b.fs);
+  let acc = 0;
+  let body = samples[samples.length - 1].fs;
+  for (const s of samples) {
+    acc += s.weight;
+    if (acc >= total / 2) {
+      body = s.fs;
+      break;
+    }
+  }
+  for (const block of blocks) {
+    if (block.t === 'p' && block.fs > 0 && block.fs < body * 0.86 && blockText(block).length < 240) block.small = 1;
+  }
+  return blocks;
+}
+
 /**
  * blocks -> DOM，追加到 root。
  * 引用深度 q 用嵌套 blockquote 表达；连续的列表项按 depth 组织成嵌套列表。
  */
 export function renderBlocks(blocks, root, { onImageLoad = () => {} } = {}) {
+  markSmallBlocks(blocks);
   const quotes = [root];
   let lists = [];
   let listParent = null;
@@ -181,7 +215,7 @@ export function renderBlocks(blocks, root, { onImageLoad = () => {} } = {}) {
         container.append(renderTable(block));
         break;
       default:
-        container.append(appendRuns(el('p'), block.runs));
+        container.append(appendRuns(el('p', block.small ? 'small' : ''), block.runs));
     }
   }
 }

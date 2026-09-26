@@ -20,7 +20,8 @@ function buildTestExtension() {
     cpSync(path.join(ROOT, entry), path.join(dir, entry), { recursive: true });
   }
   const manifest = JSON.parse(readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
-  manifest.host_permissions = [...manifest.host_permissions, 'http://127.0.0.1/*'];
+  // 真实网站验收（LIVE=1）要在任意站点注入；平时只放行本地测试服务器
+  manifest.host_permissions = [...manifest.host_permissions, process.env.LIVE ? '<all_urls>' : 'http://127.0.0.1/*'];
   writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2));
   return dir;
 }
@@ -80,6 +81,8 @@ export const LEXICON = {
   sugarcane: { rank: null, phonetic: 'ˈʃʊɡərkeɪn', defs: [d('n.', '甘蔗')] },
   paperback: { rank: 9600, phonetic: 'ˈpeɪpərbæk', defs: [d('n.', '平装本')] },
   regular: { rank: 1500, phonetic: 'ˈreɡjələr', defs: [d('adj.', '规则的'), d('n.', '常客')] },
+  manage: { rank: 4556, level: 1600, phonetic: 'ˈmænɪdʒ', defs: [d('v.', '管理', '设法做到')] },
+  website: { rank: null, level: 3500, phonetic: 'ˈwebsaɪt', defs: [d('n.', '网站')] },
 };
 
 const FORMS = {
@@ -100,6 +103,12 @@ const FORMS = {
 
 const MISSING = new Set(['serendipity', 'taipei', 'bangkok', 'nasa', 'whitfield', 'mei', 'dana']);
 export const MACHINE = { serendipity: '意外发现的好运' };
+/** 语境释义 mock：只给几个词，其余不返回（真实模型也会跳过没把握的词）。 */
+export const CONTEXT = {
+  clatter: { pos: 'n.', zh: '（锅铲的）叮当声' },
+  labyrinth: { pos: 'n.', zh: '迷宫般的摊位' },
+  ephemeral: { pos: 'adj.', zh: '转瞬即逝的' },
+};
 
 export function mockGlossary(words) {
   const entries = {};
@@ -114,18 +123,18 @@ export function mockGlossary(words) {
     const lemma = FORMS[form] || form;
     const data = LEXICON[lemma];
     if (data) {
-      entries[form] = { lemma, rank: data.rank, name: false };
+      entries[form] = { lemma, rank: data.rank, level: data.level ?? null, name: false };
       lemmas[lemma] = { word: lemma, rank: data.rank, phonetic: data.phonetic, audio: '', defs: data.defs, tags: ['CET6'], name: false };
     } else {
-      entries[form] = { lemma: form, rank: 400, name: false };
+      entries[form] = { lemma: form, rank: 400, level: null, name: false };
       lemmas[form] = { word: form, rank: 400, phonetic: '', audio: '', defs: [d('', '常用词')], tags: [], name: false };
     }
   }
   return { entries, lemmas, missing };
 }
 
-export async function installApiMock(context, { failGlossary = false } = {}) {
-  const calls = { glossary: 0, translate: 0, guest: 0 };
+export async function installApiMock(context, { failGlossary = false, contextStatus = 200 } = {}) {
+  const calls = { glossary: 0, translate: 0, guest: 0, context: 0, contextItems: [] };
   await context.route('https://json-view.org/english/api/**', async (route) => {
     const url = new URL(route.request().url());
     const json = (status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -144,6 +153,15 @@ export async function installApiMock(context, { failGlossary = false } = {}) {
       const { text } = route.request().postDataJSON();
       const lines = text.split('\n').map((w) => MACHINE[w] || `${w}（机翻）`);
       return json(200, { translation: lines.join('\n') });
+    }
+    if (url.pathname.endsWith('/api/ai/reader-gloss')) {
+      calls.context += 1;
+      const { items } = route.request().postDataJSON();
+      calls.contextItems.push(...items);
+      if (contextStatus !== 200) return json(contextStatus, { detail: 'quota' });
+      const glosses = {};
+      for (const item of items) if (CONTEXT[item.key]) glosses[item.key] = CONTEXT[item.key];
+      return json(200, { glosses });
     }
     return json(404, { detail: 'not mocked' });
   });

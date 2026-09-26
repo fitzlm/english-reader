@@ -133,6 +133,15 @@ export async function translateWords(words) {
   return out;
 }
 
+/**
+ * 语境释义：[{key, word, sentence}] -> {key: {pos, zh}}。走 AI 配额，额度用完时抛 status 429。
+ */
+export async function fetchContextGlosses(items) {
+  if (!items.length) return {};
+  const data = await request('/api/ai/reader-gloss', { method: 'POST', body: { items } });
+  return data && typeof data.glosses === 'object' && data.glosses ? data.glosses : {};
+}
+
 const LOGIN_ERRORS = {
   404: '账号不存在',
   401: '密码不正确',

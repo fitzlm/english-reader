@@ -73,8 +73,11 @@ export function captureSelection() {
     return last.br ? '\n' : last.text.slice(-1);
   }
 
-  function appendRun(text) {
+  function appendRun(text, node) {
     const block = ensureBlock();
+    if (block.fs == null && node && node.parentElement && text.trim()) {
+      block.fs = parseFloat(getComputedStyle(node.parentElement).fontSize) || undefined;
+    }
     const marks = {};
     if (state.b) marks.b = 1;
     if (state.i) marks.i = 1;
@@ -89,26 +92,36 @@ export function captureSelection() {
     chars += text.length;
   }
 
-  function pushText(raw) {
+  function pushText(raw, node) {
     if (!raw) return;
     if (state.pre || (cur && cur.t === 'pre')) {
-      appendRun(raw.replace(/ /g, ' '));
+      appendRun(raw.replace(/\u00a0/g, ' '), node);
       return;
     }
-    let text = raw.replace(/[\s ​]+/g, ' ');
+    let text = raw.replace(/[\s\u00a0\u200b]+/g, ' ');
     if (!text) return;
     const prev = lastChar();
     if (text.startsWith(' ') && (!cur || !prev || prev === ' ' || prev === '\n')) text = text.slice(1);
     if (!text) return;
-    appendRun(text);
+    appendRun(text, node);
   }
 
   function pushBreak() {
     if (!cur) return;
     const last = cur.runs[cur.runs.length - 1];
+    if (cur.t === 'pre') {
+      appendRun('\n');
+      return;
+    }
+    // 老式网页用 <br><br> 分段：第二个换行结束当前段落，下一段自动开新块
+    if (last && last.br && (cur.t === 'p' || cur.t === 'li')) {
+      const { t, list, depth } = cur;
+      flush();
+      if (t === 'li') newBlock('li', { list, depth, cont: 1 });
+      return;
+    }
     if (last && !last.br) last.text = last.text.replace(/ +$/, '');
-    if (cur.t === 'pre') appendRun('\n');
-    else cur.runs.push({ text: '', br: 1 });
+    cur.runs.push({ text: '', br: 1 });
   }
 
   function flush() {
@@ -164,6 +177,14 @@ export function captureSelection() {
     return '';
   }
 
+  // 指向本页锚点的链接（目录、标题自身的 # 链接）在阅读页里没有意义，当普通文字
+  function linkUrl(value) {
+    const url = safeUrl(value, false);
+    if (!url) return '';
+    const here = location.href.split('#')[0];
+    return url.split('#')[0] === here ? '' : url;
+  }
+
   function imageSrc(img) {
     const lazy = img.getAttribute('data-src') || img.getAttribute('data-original') || img.getAttribute('data-lazy-src');
     const current = img.currentSrc || img.src || '';
@@ -203,7 +224,7 @@ export function captureSelection() {
 
   function visit(node) {
     if (node.nodeType === Node.TEXT_NODE) {
-      pushText(clipText(node));
+      pushText(clipText(node), node);
       return;
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return;
@@ -259,7 +280,7 @@ export function captureSelection() {
       if (tag === 'B' || tag === 'STRONG' || Number(style.fontWeight) >= 600) state.b = 1;
       if (tag === 'I' || tag === 'EM' || tag === 'CITE' || style.fontStyle === 'italic') state.i = 1;
       if (tag === 'CODE' || tag === 'KBD' || tag === 'SAMP' || tag === 'TT') state.code = 1;
-      if (tag === 'A') state.href = safeUrl(el.getAttribute('href'), false) || state.href;
+      if (tag === 'A') state.href = linkUrl(el.getAttribute('href')) || state.href;
       visitChildren(el);
       Object.assign(state, saved);
       return;
@@ -337,7 +358,7 @@ export function captureSelection() {
     if (el.tagName === 'BLOCKQUOTE') state.quote += 1;
     if (el.tagName === 'UL' || el.tagName === 'OL') state.lists.push(el.tagName === 'OL' ? 'ol' : 'ul');
     if (el.tagName === 'PRE' || /^pre/.test(style.whiteSpace)) state.pre = 1;
-    if (el.tagName === 'A') state.href = safeUrl(el.getAttribute('href'), false);
+    if (el.tagName === 'A') state.href = linkUrl(el.getAttribute('href'));
     if (el.tagName === 'B' || el.tagName === 'STRONG') state.b = 1;
     if (el.tagName === 'I' || el.tagName === 'EM') state.i = 1;
     if (el.tagName === 'CODE') state.code = 1;

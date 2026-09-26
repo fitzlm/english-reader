@@ -7,6 +7,7 @@ export const DEFAULTS = Object.freeze({
   theme: 'auto', // auto | paper | sepia | night
   fontSize: 20,
   font: 'serif', // serif | sans
+  contextGloss: true, // 结合上下文给出生词在句中的意思（消耗 AI 次数）
 });
 
 export const FONT_SIZES = [16, 17, 18, 19, 20, 22, 24, 26, 28];
@@ -35,4 +36,24 @@ export function onSettingsChanged(callback) {
 export async function getApiBase() {
   const { apiBase } = await chrome.storage.local.get('apiBase');
   return String(apiBase || DEFAULT_API_BASE).replace(/\/+$/, '');
+}
+
+// ---------- 认识的词 ----------
+// 放 storage.local：可能积累上千个，sync 的单项 8KB 限额放不下。
+
+export async function loadKnownWords() {
+  const { known } = await chrome.storage.local.get('known');
+  return new Set(Array.isArray(known) ? known : []);
+}
+
+export async function setWordKnown(word, isKnown) {
+  const set = await loadKnownWords();
+  if (isKnown) set.add(word);
+  else set.delete(word);
+  await chrome.storage.local.set({ known: [...set] });
+  return set;
+}
+
+export async function clearKnownWords() {
+  await chrome.storage.local.set({ known: [] });
 }

@@ -24,9 +24,73 @@ export function normalizeForm(raw) {
   return word;
 }
 
-/** 句首判定：前一个有效字符是句末标点、引号、括号、破折号，或者块的开头。 */
+const LATIN_RE = /\p{Script=Latin}/u;
+
+function isAccentedLatin(ch) {
+  return Boolean(ch) && LATIN_RE.test(ch) && !/[A-Za-z]/.test(ch);
+}
+
+/**
+ * 代码标识符、网址、文件名里的词不参与生词判断：Node.js 的 js、example.com、
+ * getElementById（驼峰）、foo_bar、count()、紧挨数字的 3D / mp3 等。
+ */
+export function isIdentifierLike(text, start, end) {
+  const raw = text.slice(start, end);
+  if (/[a-z][A-Z]/.test(raw)) return true;
+  const before = text[start - 1] || '';
+  const before2 = text[start - 2] || '';
+  const after = text[end] || '';
+  const after2 = text[end + 1] || '';
+  // 带变音符号的外文词会被 ASCII 分词拆碎（Haladvīpa -> haladv + pa、café -> caf），碎片不参与
+  if (isAccentedLatin(before) || isAccentedLatin(after)) return true;
+  if (/[./@_#$=]/.test(before) && /[A-Za-z0-9]/.test(before2)) return true;
+  if (/[./@_]/.test(after) && /[A-Za-z0-9]/.test(after2)) return true;
+  if (after === '(') return true;
+  if (/[0-9]/.test(before) || /[0-9]/.test(after)) return true;
+  return false;
+}
+
+/** 生词难度：词频排名与考纲档位取较小者（越小越常见）；两者都没有返回 null（按最生僻处理）。 */
+export function difficultyOf(rank, level) {
+  const values = [rank, level].filter((v) => typeof v === 'number' && v > 0);
+  return values.length ? Math.min(...values) : null;
+}
+
+/**
+ * 从一段文字里取出包含 offset 位置的那句话，最长 maxLength 字符（超长时以 offset 为中心截取）。
+ */
+export function sentenceAt(text, offset, maxLength = 360) {
+  const re = /[^.!?…]+(?:[.!?…]+["”’)\]]*|$)\s*/g;
+  let sentence = text;
+  let start = 0;
+  for (let m = re.exec(text); m && m[0]; m = re.exec(text)) {
+    if (offset >= m.index && offset < m.index + m[0].length) {
+      sentence = m[0];
+      start = m.index;
+      break;
+    }
+  }
+  sentence = sentence.trim();
+  if (sentence.length <= maxLength) return sentence;
+  const local = Math.max(0, offset - start);
+  const from = Math.max(0, Math.min(local - Math.floor(maxLength / 2), sentence.length - maxLength));
+  return sentence.slice(from, from + maxLength).trim();
+}
+
+/**
+ * 句首判定：前一个有效字符是句末标点、引号、破折号，或者块的开头。
+ * 括号不算：括号里大写开头的几乎都是专有名词，比如 Sri Lanka (Ceylon)。
+ */
 export function isSentenceStart(prevChar) {
-  return prevChar == null || /[.!?…:;"“”'‘’(\[{—–\-•·*>]/.test(prevChar);
+  return prevChar == null || /[.!?…:;"“”'‘’—–\-•·*>]/.test(prevChar);
+}
+
+/** 人人都认识的缩写与网络用语：词库里有、但标成生词只会添乱。 */
+export const COMMON_ABBREVIATIONS = new Set(['etc', 'okay', 'aka', 'faq', 'diy', 'fyi', 'asap', 'lol', 'btw', 'imo', 'omg', 'app', 'apps']);
+
+/** 能不能被标成生词：至少 3 个字母、不是常见缩写。两个字母的多半是音译或缩写的碎片（pa、dv）。 */
+export function isMarkableForm(form) {
+  return form.length >= 3 && !COMMON_ABBREVIATIONS.has(form);
 }
 
 /**
@@ -120,7 +184,7 @@ export function splitLongParagraph(text, target = 520) {
 export function blocksFromText(text) {
   const clean = String(text || '')
     .replace(/\r\n?/g, '\n')
-    .replace(/ /g, ' ')
+    .replace(/\u00a0/g, ' ')
     .trim();
   if (!clean) return [];
   const paragraphs = [];
