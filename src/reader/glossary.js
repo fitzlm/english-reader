@@ -4,7 +4,7 @@
 // 重新筛选，不必再请求；单击任意词也能直接给出释义。生词就绪后再请求一次「语境释义」，
 // 回来后把旁注、卡片、生词表里的首要释义换成这个词在句中的意思。
 
-import { ApiError, fetchContextGlosses, fetchGlossary, translateWords } from '../shared/api.js';
+import { ApiError, fetchContextGlosses, fetchGlossary, request, translateWords } from '../shared/api.js';
 import { setWordKnown } from '../shared/settings.js';
 import {
   WORD_RE,
@@ -669,7 +669,7 @@ export class Glossary {
         this.hideCard();
         return;
       }
-      chrome.runtime.sendMessage({ type: 'lp-open-flashcard-create', word: form }).catch(() => {});
+      request(`/api/update-word/${encodeURIComponent(form)}`, { method: 'POST', body: { context: {} } }).catch(() => {});
       this.lookupForm(form, range.getBoundingClientRect(), { range, span });
     });
     pop.addEventListener('mouseenter', () => clearTimeout(this.popState.hideTimer));

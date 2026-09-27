@@ -136,13 +136,21 @@ export function mockGlossary(words) {
 
 export async function installApiMock(context, { failGlossary = false, contextStatus = 200 } = {}) {
   const state = { failGlossary };
-  const calls = { glossary: 0, translate: 0, guest: 0, context: 0, contextItems: [] };
+  const calls = { glossary: 0, translate: 0, guest: 0, context: 0, contextItems: [], wordUpdates: [] };
   await context.route('https://json-view.org/english/api/**', async (route) => {
     const url = new URL(route.request().url());
     const json = (status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
     if (url.pathname.endsWith('/api/guest-token')) {
       calls.guest += 1;
       return json(200, { access_token: `guest-${calls.guest}`, token_type: 'bearer' });
+    }
+    if (url.pathname.startsWith('/english/api/update-word/')) {
+      calls.wordUpdates.push({
+        word: decodeURIComponent(url.pathname.slice('/english/api/update-word/'.length)),
+        body: route.request().postDataJSON(),
+        authorization: route.request().headers().authorization,
+      });
+      return json(200, { status: 'success' });
     }
     if (url.pathname.endsWith('/api/words/glossary')) {
       calls.glossary += 1;

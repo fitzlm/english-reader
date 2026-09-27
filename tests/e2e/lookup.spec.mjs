@@ -21,6 +21,32 @@ async function pointInText(frame, token, { selector = '#article', occurrence = 0
   }, { token, selector, occurrence, start, length });
 }
 
+test('单击查义记录一次查询，再次单击收起且不打开新标签', async ({ context, serviceWorker, server }) => {
+  const calls = await installApiMock(context);
+  const page = await context.newPage();
+  const url = `${server}/article.html`;
+  await page.goto(url);
+  await selectBetween(page, '#title', '#last');
+  await openReader(serviceWorker, url);
+  const frame = await readerFrame(page);
+  const article = frame.locator('#article');
+  const pop = frame.locator('#pop');
+  await expect(frame.locator('#countText')).toHaveText(/\d+ 个生词/);
+  const initialPageCount = context.pages().length;
+  const market = await pointInText(frame, 'market', { selector: 'p' });
+
+  await article.click({ position: market });
+  await expect(pop.locator('.pop-word')).toHaveText('market');
+  await expect.poll(() => calls.wordUpdates.length).toBe(1);
+  expect(calls.wordUpdates[0]).toEqual({ word: 'market', body: { context: {} }, authorization: expect.stringMatching(/^Bearer guest-\d+$/) });
+
+  await article.click({ position: market });
+  await expect(pop).toBeHidden();
+  await page.waitForTimeout(300);
+  expect(calls.wordUpdates).toHaveLength(1);
+  expect(context.pages()).toHaveLength(initialPageCount);
+});
+
 test('正文任意词单击查义，短词、缩写和邻近空白有明确命中边界', async ({ context, serviceWorker, server }) => {
   await installApiMock(context);
   const page = await context.newPage();
