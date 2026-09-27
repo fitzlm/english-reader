@@ -1,6 +1,6 @@
 {
   "name": "linguipro-reader",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "LinguiPro 静读：Chrome 插件，选中英文后排成舒服的阅读版式并按词汇量标出生词",
