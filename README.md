@@ -8,14 +8,21 @@ Literata 正文、1.85 倍行距，默认正文宽度 800px，参考 A4 纸的�
 
 ## 安装
 
-还没有上架应用商店，用开发者模式加载：
+还没有上架 Chrome 应用商店。可以直接从源码仓库加载，不需要先构建：
 
-1. 打开 `chrome://extensions`，打开右上角「开发者模式」
-2. 点「加载已解压的扩展程序」，选择本目录 `linguipro-reader/`
-   （或者先 `npm run package` 生成 `dist/linguipro-reader-<版本>.zip`，解压后选择解压出的目录）
-3. 安装后会自动打开欢迎页：选中页面上的示范段落，右键「用静读打开」试一下
+1. 克隆本仓库，或在 GitHub 上下载并解压代码：
 
-需要 Chrome 120 或更新版本。
+   ```bash
+   git clone https://github.com/fitzlm/english-reader.git
+   ```
+
+2. 在 Chrome 地址栏打开 `chrome://extensions`，打开右上角的「开发者模式」。
+3. 点击「加载已解压的扩展程序」，选择克隆或解压后的 `english-reader` **仓库根目录**。请选择其中直接包含 `manifest.json` 的目录，不要选 `src/`。
+4. 安装后会自动打开欢迎页。选中示范段落，右键选择「用静读打开」即可试用。
+
+需要 Chrome 120 或更新版本。日常使用源码目录时，不需要运行 `npm install` 或构建命令。修改插件代码后，回到 `chrome://extensions`，点击「LinguiPro 静读」卡片上的刷新图标；如果插件已在网页中打开，再刷新该网页。
+
+也可以将插件打包成 zip：在仓库根目录运行 `npm run package`，生成 `dist/linguipro-reader-<版本>.zip`。将 zip 解压后，在「加载已解压的扩展程序」中选择解压出来、直接包含 `manifest.json` 的目录。
 
 ## 用法
 
