@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Page Lookup Fixture</title>
+  <style>
+    body { max-width: 900px; margin: 32px auto; font: 20px/1.5 Georgia, serif; color: #222; }
+    p { margin: 0 0 14px; }
+    #edge { position: fixed; right: 6px; bottom: 6px; margin: 0; }
+    #corner { position: fixed; right: 6px; top: 6px; margin: 0; }
+    .spacer { height: 1600px; }
+  </style>
+  <script>
+    // 测试用：数一数点词实例派发过几次接管事件（DOM 事件可跨隔离环境被网页看到）
+    window.takeovers = 0;
+    document.addEventListener('lp-page-lookup:takeover', () => { window.takeovers += 1; });
+    window.buttonClicks = 0;
+  </script>
+</head>
+<body>
+  <p id="dict">The ephemeral stalls were dismantled before dawn, and the labyrinth of lanes went quiet.</p>
+  <p id="mt">It was pure serendipity that we met a friend there.</p>
+  <p id="apos">I don't know; it was nine o'clock , maybe later .</p>
+  <p id="controls">
+    Read the <a id="link" href="#target">municipal notice</a> or
+    <button id="btn" type="button" onclick="window.buttonClicks += 1">vendor button</button>
+    <input id="field" value="relentless input">
+  </p>
+  <div id="editable" contenteditable="true">The meticulous editor wrote here.</div>
+  <p id="codeline">Call <code>lantern</code> to light it.</p>
+  <p id="split">An <b>ephem</b>eral word split in two.</p>
+  <p id="dynamic"><button id="add" type="button">add paragraph</button></p>
+  <p id="corner">aroma</p>
+  <p id="edge">cacophony</p>
+  <div class="spacer"></div>
+  <p id="target">Target section.</p>
+  <script>
+    document.getElementById('add').addEventListener('click', () => {
+      const p = document.createElement('p');
+      p.id = 'added';
+      p.textContent = 'The municipal ordinances were relentless.';
+      document.getElementById('dynamic').after(p);
+    });
+  </script>
+</body>
+</html>

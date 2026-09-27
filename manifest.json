@@ -42,6 +42,10 @@
     {
       "resources": ["src/reader/reader.html"],
       "matches": ["<all_urls>"]
+    },
+    {
+      "resources": ["src/page/lookup.js", "src/shared/text.js"],
+      "matches": ["http://*/*", "https://*/*"]
     }
   ]
 }
