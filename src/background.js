@@ -7,6 +7,7 @@
 import { captureSelection } from './capture.js';
 import { mountReader, showHint } from './overlay.js';
 import { readerUrl, storeDoc } from './shared/docs.js';
+import { handlePageLookupMessage } from './shared/page-lookup.js';
 import { translateParagraph } from './shared/paragraph-translation.js';
 
 const MENU_ID = 'linguipro-open-reader';
@@ -44,12 +45,20 @@ chrome.commands.onCommand.addListener((command, tab) => {
 
 chrome.action.onClicked.addListener((tab) => openReader(tab, {}));
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type !== 'lp-translate-paragraph') return false;
-  translateParagraph(message.text).then(
-    (translation) => sendResponse({ translation }),
-    (err) => sendResponse({ error: err.message || '翻译失败', ...(err.status ? { status: err.status } : {}) }),
-  );
+// 异步消息：处理函数返回 Promise，结果交给 sendResponse；返回 true 让通道保持到应答为止
+const MESSAGE_HANDLERS = {
+  'lp-translate-paragraph': (message) =>
+    translateParagraph(message.text).then(
+      (translation) => ({ translation }),
+      (err) => ({ error: err.message || '翻译失败', ...(err.status ? { status: err.status } : {}) }),
+    ),
+  'lp-page-lookup': (message, sender) => handlePageLookupMessage(message, sender),
+};
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  const handler = Object.hasOwn(MESSAGE_HANDLERS, message?.type) ? MESSAGE_HANDLERS[message.type] : null;
+  if (!handler) return false;
+  handler(message, sender).then(sendResponse);
   return true;
 });
 
