@@ -150,9 +150,15 @@
   box-sizing: border-box;
 }
 
+/* 纵向 none：到顶/到底不回弹。contain 仍允许本页橡皮筋回弹，会把 iframe 底下的原网页露出来 */
+html,
+body {
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: none;
+}
+
 html {
   background: var(--bg);
-  overscroll-behavior: contain;
   scroll-padding-top: 96px;
   -webkit-text-size-adjust: 100%;
 }

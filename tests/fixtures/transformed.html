@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Transformed Body</title>
+    <!-- body 带 transform：挂在 body 下的 position:fixed 会相对 body 定位，盖不满视口 -->
+    <style>
+      body { margin: 40px; transform: translateZ(0); }
+    </style>
+  </head>
+  <body>
+    <button id="focusMe" type="button">Focus me</button>
+    <article id="story"></article>
+    <script>
+      const common = 'the people of the city walk along the river every morning and talk about the weather while children play near the old bridge'.split(' ');
+      const story = document.getElementById('story');
+      const h = document.createElement('h1');
+      h.id = 'title';
+      h.textContent = 'Transformed Body';
+      story.append(h);
+      for (let p = 0; p < 40; p += 1) {
+        const words = [];
+        for (let i = 0; i < 120; i += 1) words.push(common[(p * 7 + i) % common.length]);
+        const para = document.createElement('p');
+        para.textContent = words.join(' ').replace(/^./, (c) => c.toUpperCase()) + '.';
+        story.append(para);
+      }
+      const end = document.createElement('p');
+      end.id = 'last';
+      end.textContent = 'The end.';
+      story.append(end);
+    </script>
+  </body>
+</html>

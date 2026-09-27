@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Body Scroller</title>
+    <!-- body 自己当滚动容器，html 不滚 -->
+    <style>
+      html, body { height: 100%; margin: 0; }
+      body { overflow: auto; }
+    </style>
+  </head>
+  <body>
+    <button id="focusMe" type="button">Focus me</button>
+    <article id="story"></article>
+    <script>
+      const common = 'the people of the city walk along the river every morning and talk about the weather while children play near the old bridge'.split(' ');
+      const story = document.getElementById('story');
+      const h = document.createElement('h1');
+      h.id = 'title';
+      h.textContent = 'Body Scroller';
+      story.append(h);
+      for (let p = 0; p < 40; p += 1) {
+        const words = [];
+        for (let i = 0; i < 120; i += 1) words.push(common[(p * 7 + i) % common.length]);
+        const para = document.createElement('p');
+        para.textContent = words.join(' ').replace(/^./, (c) => c.toUpperCase()) + '.';
+        story.append(para);
+      }
+      const end = document.createElement('p');
+      end.id = 'last';
+      end.textContent = 'The end.';
+      story.append(end);
+    </script>
+  </body>
+</html>

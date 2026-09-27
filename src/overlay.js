@@ -5,8 +5,10 @@
 // 以及广告拦截脚本的 querySelectorAll('iframe') 都碰不到它。
 export function mountReader(readerUrl) {
   const HOST_TAG = 'linguipro-reader';
-  const previous = document.querySelector(HOST_TAG);
-  if (previous && typeof previous.lpClose === 'function') previous.lpClose(true);
+  // 替换旧阅读层（包括正在淡出的）：同步关掉、恢复原网页，再记录下面的状态
+  for (const previous of document.querySelectorAll(HOST_TAG)) {
+    if (typeof previous.lpClose === 'function') previous.lpClose(true);
+  }
 
   const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const host = document.createElement(HOST_TAG);
@@ -43,16 +45,26 @@ export function mountReader(readerUrl) {
   frame.src = readerUrl;
   shadow.append(style, frame);
 
+  // 旧阅读层已在上面同步关闭、恢复完毕，这里记下的才是原网页自己的状态
   const html = document.documentElement;
+  const body = document.body;
+  const lockTargets = body ? [html, body] : [html];
   const saved = {
-    overflow: html.style.getPropertyValue('overflow'),
-    priority: html.style.getPropertyPriority('overflow'),
+    overflow: lockTargets.map((el) => [el.style.getPropertyValue('overflow'), el.style.getPropertyPriority('overflow')]),
+    scrollX: window.scrollX,
+    scrollY: window.scrollY,
+    // body 自己当滚动容器的网页（html,body{height:100%} body{overflow:auto}）
+    bodyScroll: body ? [body.scrollLeft, body.scrollTop] : null,
     focus: document.activeElement,
   };
-  (document.body || html).appendChild(host);
+  // 挂在 <html> 下而不是 <body>：body 带 transform 时 position:fixed 会相对 body 定位，盖不满视口
+  html.appendChild(host);
 
   let shown = false;
   let closed = false;
+  let locked = false;
+  let lockTimer = 0;
+  let removeTimer = 0;
   const fallback = setTimeout(show, 1500);
 
   function show() {
@@ -62,18 +74,59 @@ export function mountReader(readerUrl) {
     frame.classList.add('in');
     frame.focus();
     // 淡入结束、阅读层完全不透明后再锁滚动：滚动条消失引起的页面跳动被盖在下面看不见
-    setTimeout(() => {
-      if (!closed) html.style.setProperty('overflow', 'hidden', 'important');
-    }, reduceMotion ? 0 : 220);
+    lockTimer = setTimeout(lockScroll, reduceMotion ? 0 : 220);
+  }
+
+  function lockScroll() {
+    lockTimer = 0;
+    if (closed || locked) return;
+    locked = true;
+    for (const el of lockTargets) el.style.setProperty('overflow', 'hidden', 'important');
   }
 
   function unlockScroll() {
-    if (saved.overflow) html.style.setProperty('overflow', saved.overflow, saved.priority);
-    else html.style.removeProperty('overflow');
+    clearTimeout(lockTimer);
+    lockTimer = 0;
+    if (!locked) return;
+    locked = false;
+    lockTargets.forEach((el, i) => {
+      const [value, priority] = saved.overflow[i];
+      if (value) el.style.setProperty('overflow', value, priority);
+      else el.style.removeProperty('overflow');
+    });
+    // 锁定期间滚动位置若被带动（滚动条消失、原网页脚本等），放回原处
+    // behavior: instant——网页设了 scroll-behavior: smooth 也不要看到它滑回去
+    if (window.scrollX !== saved.scrollX || window.scrollY !== saved.scrollY) {
+      window.scrollTo({ left: saved.scrollX, top: saved.scrollY, behavior: 'instant' });
+    }
+    const [left, top] = saved.bodyScroll || [];
+    if (saved.bodyScroll && (body.scrollLeft !== left || body.scrollTop !== top)) {
+      body.scrollTo({ left, top, behavior: 'instant' });
+    }
+  }
+
+  // 只接受纯颜色值，拒绝 url()、表达式之类
+  function safeColor(value) {
+    if (typeof value !== 'string' || value.length > 64) return '';
+    return /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%/]+\))$/i.test(value.trim()) ? value.trim() : '';
+  }
+
+  function setFrameBackground(value) {
+    const color = safeColor(value);
+    // 只给 iframe 上底色（宿主保持透明），淡入仍由 iframe 的 opacity 过渡完成
+    if (color) frame.style.setProperty('background', color, 'important');
   }
 
   function close(immediate) {
-    if (closed) return;
+    if (closed) {
+      // 正在淡出时又被新的阅读层替换：立刻收尾，免得 200ms 后把焦点抢回原网页
+      if (immediate && removeTimer) {
+        clearTimeout(removeTimer);
+        removeTimer = 0;
+        finish();
+      }
+      return;
+    }
     closed = true;
     clearTimeout(fallback);
     window.removeEventListener('message', onMessage, true);
@@ -81,24 +134,29 @@ export function mountReader(readerUrl) {
     // 先在不透明的阅读层下面恢复滚动，再淡出
     unlockScroll();
     frame.classList.remove('in');
-    const done = () => {
-      host.remove();
-      if (saved.focus && typeof saved.focus.focus === 'function') {
-        try {
-          saved.focus.focus({ preventScroll: true });
-        } catch (e) {
-          // 原焦点元素可能已被移除
-        }
+    if (immediate || reduceMotion) finish();
+    else removeTimer = setTimeout(finish, 200);
+  }
+
+  function finish() {
+    removeTimer = 0;
+    host.remove();
+    if (saved.focus && typeof saved.focus.focus === 'function') {
+      try {
+        saved.focus.focus({ preventScroll: true });
+      } catch (e) {
+        // 原焦点元素可能已被移除
       }
-    };
-    if (immediate || reduceMotion) done();
-    else setTimeout(done, 200);
+    }
   }
 
   function onMessage(event) {
     if (event.source !== frame.contentWindow) return;
     const data = event.data || {};
-    if (data.lp === 'ready') show();
+    if (data.lp === 'ready') {
+      setFrameBackground(data.color);
+      show();
+    } else if (data.lp === 'bg') setFrameBackground(data.color);
     else if (data.lp === 'close') close(false);
   }
 

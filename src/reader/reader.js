@@ -54,9 +54,15 @@ let status = { state: 'idle', count: 0 };
 function applyTheme() {
   const theme = settings.theme === 'auto' ? (darkQuery.matches ? 'night' : 'paper') : settings.theme;
   document.documentElement.dataset.theme = theme;
+  // 外层 iframe 的底色跟着主题走：万一露出边缘，看到的也是阅读页的底色而不是原网页
+  if (inFrame) window.parent.postMessage({ lp: 'bg', color: pageBackground() }, '*');
   for (const button of dom.themeSeg.querySelectorAll('button')) {
     button.setAttribute('aria-pressed', String(button.dataset.theme === settings.theme));
   }
+}
+
+function pageBackground() {
+  return getComputedStyle(document.body).backgroundColor;
 }
 
 function applyFont() {
@@ -393,7 +399,7 @@ async function loadDoc() {
 }
 
 function signalReady() {
-  if (inFrame) window.parent.postMessage({ lp: 'ready' }, '*');
+  if (inFrame) window.parent.postMessage({ lp: 'ready', color: pageBackground() }, '*');
 }
 
 async function main() {
