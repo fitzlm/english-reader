@@ -669,6 +669,7 @@ export class Glossary {
         this.hideCard();
         return;
       }
+      chrome.runtime.sendMessage({ type: 'lp-open-flashcard-create', word: form }).catch(() => {});
       this.lookupForm(form, range.getBoundingClientRect(), { range, span });
     });
     pop.addEventListener('mouseenter', () => clearTimeout(this.popState.hideTimer));

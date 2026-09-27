@@ -8,6 +8,7 @@ import { captureSelection } from './capture.js';
 import { mountReader, showHint } from './overlay.js';
 import { readerUrl, storeDoc } from './shared/docs.js';
 import { translateParagraph } from './shared/paragraph-translation.js';
+import { getApiBase } from './shared/settings.js';
 
 const MENU_ID = 'linguipro-open-reader';
 const OPTIONS_PAGE = chrome.runtime.getURL('src/options/options.html');
@@ -45,6 +46,14 @@ chrome.commands.onCommand.addListener((command, tab) => {
 chrome.action.onClicked.addListener((tab) => openReader(tab, {}));
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === 'lp-open-flashcard-create') {
+    const word = typeof message.word === 'string' ? message.word.toLowerCase().replace(/[’‘]/g, "'") : '';
+    if (word.length < 1 || word.length > 40 || !/^[a-z]+(?:'[a-z]+)*$/.test(word)) return false;
+    getApiBase()
+      .then((base) => chrome.tabs.create({ url: `${base}/flashcards/create?word=${encodeURIComponent(word)}`, active: true }))
+      .then(() => sendResponse({ opened: true }), () => sendResponse({ opened: false }));
+    return true;
+  }
   if (message?.type !== 'lp-translate-paragraph') return false;
   translateParagraph(message.text).then(
     (translation) => sendResponse({ translation }),
