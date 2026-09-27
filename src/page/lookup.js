@@ -7,7 +7,8 @@
 // - 查词只把点中的原词发给后台（{type:'lp-page-lookup', word}），鉴权与网络请求都在后台。
 // - 接管：启动时在 document 上派发 lp-page-lookup:takeover，旧实例（重复注入、扩展重载后
 //   留下的孤儿脚本；DOM 事件可以跨隔离环境）收到后自行卸载。扩展上下文失效时也静默卸载。
-// - 后台发来 {type:'lp-page-lookup-stop'} 时移除词卡、撤掉所有监听。
+// - 后台发来 {type:'lp-page-lookup-stop', origin?} 时移除词卡、撤掉所有监听；
+//   带 origin 时只有同站页面响应（撤权后后台看不到标签页地址，只能逐个标签页广播）。
 //
 // 词卡用 open shadow root：样式照样与网页隔离；卡里只有公开的词典/机翻结果，
 // 网页脚本本来就能读到页面上显示的任何文字，closed 模式并不多保护什么，
@@ -289,7 +290,9 @@ export function start() {
   }
 
   function onRuntimeMessage(message) {
-    if (message && message.type === 'lp-page-lookup-stop') teardown();
+    if (!message || message.type !== 'lp-page-lookup-stop') return;
+    if (message.origin && message.origin !== location.origin) return;
+    teardown();
   }
 
   // 静读打开时收起词卡；点击时另有 querySelector 判断，所以只看根节点和 body 的直接子节点

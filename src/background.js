@@ -1,4 +1,5 @@
-// 后台：三个入口（右键菜单、快捷键、工具栏按钮）都走 openReader。
+// 后台：三个入口（右键菜单、快捷键、工具栏菜单里的「打开静读」）都走 openReader。
+// 工具栏图标打开 popup（src/popup），里面还有本站点点词开关，由 shared/site-control.js 处理。
 //
 // 流程：在选区所在的框架里抓取选区 -> 存进 storage.session -> 在顶层框架盖上阅读层。
 // 页面不允许注入（Chrome 内置页、PDF 查看器、应用商店）时，退回右键菜单给的纯文本，
@@ -9,6 +10,16 @@ import { mountReader, showHint } from './overlay.js';
 import { readerUrl, storeDoc } from './shared/docs.js';
 import { handlePageLookupMessage } from './shared/page-lookup.js';
 import { translateParagraph } from './shared/paragraph-translation.js';
+import {
+  SITE_MESSAGE_HANDLERS,
+  disableSite,
+  enableSite,
+  extensionPageOnly,
+  onPermissionsAdded,
+  onPermissionsRemoved,
+  reinjectEnabledSites,
+  syncRegistration,
+} from './shared/site-control.js';
 
 const MENU_ID = 'linguipro-open-reader';
 const OPTIONS_PAGE = chrome.runtime.getURL('src/options/options.html');
@@ -32,6 +43,21 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
     });
   });
   if (reason === 'install') chrome.runtime.openOptionsPage();
+  // 核对点词站点的设置、权限与脚本注册；更新后旧版内容脚本成了孤儿，给已开启站点补注入新版
+  if (reason === 'update') reinjectEnabledSites().catch(() => {});
+  else syncRegistration().catch(() => {});
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  syncRegistration().catch(() => {});
+});
+
+chrome.permissions.onAdded.addListener((permissions) => {
+  onPermissionsAdded(permissions).catch(() => {});
+});
+
+chrome.permissions.onRemoved.addListener((permissions) => {
+  onPermissionsRemoved(permissions).catch(() => {});
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
@@ -43,8 +69,6 @@ chrome.commands.onCommand.addListener((command, tab) => {
   if (command === 'open-reader' && tab) openReader(tab, {});
 });
 
-chrome.action.onClicked.addListener((tab) => openReader(tab, {}));
-
 // 异步消息：处理函数返回 Promise，结果交给 sendResponse；返回 true 让通道保持到应答为止
 const MESSAGE_HANDLERS = {
   'lp-translate-paragraph': (message) =>
@@ -53,6 +77,12 @@ const MESSAGE_HANDLERS = {
       (err) => ({ error: err.message || '翻译失败', ...(err.status ? { status: err.status } : {}) }),
     ),
   'lp-page-lookup': (message, sender) => handlePageLookupMessage(message, sender),
+  // popup 发来的站点开关与打开静读：只接受扩展自己的页面
+  ...Object.fromEntries(Object.entries(SITE_MESSAGE_HANDLERS).map(([type, fn]) => [type, extensionPageOnly(fn)])),
+  'lp-open-reader': extensionPageOnly(async (message) => {
+    await openReader(await chrome.tabs.get(message.tabId), {});
+    return { ok: true };
+  }),
 };
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -135,3 +165,15 @@ function hostOf(url) {
 
 // 端到端测试用：Playwright 没法点原生右键菜单，直接调同一个入口
 globalThis.__lpOpenReader = openReader;
+globalThis.__lpSiteControl = {
+  enableSite,
+  disableSite,
+  syncRegistration,
+  onPermissionsAdded,
+  onPermissionsRemoved,
+  // 带伪造 sender 调消息分发，验证来源闸门
+  handleMessage: (message, sender) => {
+    const handler = Object.hasOwn(MESSAGE_HANDLERS, message?.type) ? MESSAGE_HANDLERS[message.type] : null;
+    return handler ? handler(message, sender) : Promise.resolve(undefined);
+  },
+};

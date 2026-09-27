@@ -102,10 +102,15 @@ test('turns aborts and network failures into readable errors', async () => {
 test('background responds asynchronously only to paragraph translation messages', async () => {
   const listeners = [];
   globalThis.chrome = {
-    runtime: { getURL: (path) => `chrome-extension://test/${path}`, onInstalled: { addListener() {} }, onMessage: { addListener: (fn) => listeners.push(fn) } },
+    runtime: {
+      getURL: (path) => `chrome-extension://test/${path}`,
+      onInstalled: { addListener() {} },
+      onStartup: { addListener() {} },
+      onMessage: { addListener: (fn) => listeners.push(fn) },
+    },
     contextMenus: { onClicked: { addListener() {} } },
     commands: { onCommand: { addListener() {} } },
-    action: { onClicked: { addListener() {} } },
+    permissions: { onAdded: { addListener() {} }, onRemoved: { addListener() {} } },
   };
   await import('../../src/background.js');
   assert.equal(listeners.length, 1);

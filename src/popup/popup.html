@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>LinguiPro 静读</title>
+    <link rel="stylesheet" href="popup.css" />
+    <script type="module" src="popup.js"></script>
+  </head>
+  <body>
+    <main class="popup">
+      <header class="head">
+        <img class="logo" src="../../icons/icon-32.png" alt="" width="20" height="20" />
+        <span class="brand">静读</span>
+        <span class="site" id="siteHost"></span>
+      </header>
+
+      <section class="row" aria-labelledby="lookupLabel">
+        <div class="row-text">
+          <p class="row-title" id="lookupLabel">本站点点词翻译</p>
+          <p class="row-hint" id="lookupHint">单击网页上的英文单词，显示中文释义</p>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="lookupToggle" aria-labelledby="lookupLabel" disabled />
+          <span class="switch-track" aria-hidden="true"></span>
+        </label>
+      </section>
+      <p class="notice" id="lookupNotice" role="status" hidden></p>
+
+      <button type="button" class="primary" id="openReader">打开静读</button>
+      <p class="primary-hint">先选中英文，也可右键或 <kbd>⌥⇧R</kbd></p>
+
+      <footer class="foot">
+        <button type="button" class="link" id="openOptions">设置</button>
+      </footer>
+    </main>
+  </body>
+</html>

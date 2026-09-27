@@ -12,7 +12,8 @@
     "128": "icons/icon-128.png"
   },
   "action": {
-    "default_title": "用静读打开选中的文字（⌥⇧R）",
+    "default_title": "LinguiPro 静读",
+    "default_popup": "src/popup/popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png"
