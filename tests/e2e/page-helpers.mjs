@@ -18,7 +18,7 @@ export async function setup({ context, serviceWorker, server }, { enable = true,
   const calls = await installApiMock(context);
   const page = await context.newPage();
   await page.goto(`${server}/${file}`);
-  await serviceWorker.evaluate((sites) => chrome.storage.local.set({ pageLookupSites: sites }), enable ? [server] : []);
+  await serviceWorker.evaluate((sites) => chrome.storage.local.set({ pageLookupSites: sites, lookupSource: 'linguipro' }), enable ? [server] : []);
   for (let i = 1; i <= injections; i++) {
     await inject(serviceWorker, server, file);
     // 每次启动先派发一次接管事件：以此确认模块已加载并挂好监听

@@ -24,7 +24,7 @@
     "type": "module"
   },
   "permissions": ["contextMenus", "activeTab", "scripting", "storage"],
-  "host_permissions": ["https://json-view.org/*", "https://edge.microsoft.com/*"],
+  "host_permissions": ["https://json-view.org/*", "https://edge.microsoft.com/*", "https://dict.youdao.com/*"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "commands": {
     "open-reader": {

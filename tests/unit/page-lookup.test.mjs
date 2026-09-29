@@ -45,6 +45,10 @@ const ENTRIES = { run: { lemma: 'run', rank: 300 }, running: { lemma: 'run', ran
 const MT = { zyzzyva: '象鼻虫', bare: '赤裸的', "don't": '不要' };
 
 let calls;
+let edgeCalls = 0;
+let youdaoCalls = 0;
+const EDGE = { run: '跑', zyzzyva: '象鼻虫' };
+const YOUDAO = { aroma: 'n. 芳香，浓香；（喻）气氛; 【名】 （Aroma）（瑞典）阿罗马（人名）', run: 'v. 跑，奔跑；管理; n. 跑步...' };
 let failNetwork;
 let gate; // 设置后，词库请求等它放行
 let upstreamStatus; // 设置后，词库请求直接返回这个状态码
@@ -59,6 +63,16 @@ globalThis.fetch = async (url, init = {}) => {
   calls.push({ url: String(url), pathname, body, auth: init.headers?.Authorization });
   if (pathname.startsWith('/english/api/update-word/')) return json({ ok: true });
   if (failNetwork) throw new TypeError('Failed to fetch');
+  if (String(url).startsWith('https://edge.microsoft.com/')) {
+    edgeCalls += 1;
+    return json(JSON.parse(init.body).map((w) => ({ translations: [{ text: EDGE[w] || w }] })));
+  }
+  if (String(url).startsWith('https://dict.youdao.com/')) {
+    youdaoCalls += 1;
+    const q = new URL(url).searchParams.get('q');
+    const explain = YOUDAO[q];
+    return json({ data: { entries: explain ? [{ entry: q, explain }] : [] } });
+  }
   if (pathname === '/english/api/words/glossary') {
     if (gate) await gate;
     if (upstreamStatus) return json({ detail: 'upstream says no' }, upstreamStatus);
@@ -89,18 +103,22 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 store.apiBase = 'https://example.test/english';
 store.auth = { token: 'guest-token-1', kind: 'guest' };
 store.pageLookupSites = ['https://example.com'];
+store.lookupSource = 'linguipro';
 
 const { lookupWord, handlePageLookupMessage, clearPageLookupCache } = await import('../../src/shared/page-lookup.js');
 
 beforeEach(() => {
   clearPageLookupCache();
   calls = [];
+  edgeCalls = 0;
+  youdaoCalls = 0;
   failNetwork = false;
   gate = null;
   upstreamStatus = 0;
   store.apiBase = 'https://example.test/english';
   store.auth = { token: 'guest-token-1', kind: 'guest' };
   store.pageLookupSites = ['https://example.com'];
+  store.lookupSource = 'linguipro';
 });
 
 const SENDER = { id: EXT_ID, tab: { id: 7 }, frameId: 0, url: 'https://example.com/article?id=1', origin: 'https://example.com' };
@@ -308,7 +326,7 @@ test('来源校验：只接受已开启站点顶层页面里本扩展的内容�
 
 test('上游接口自己返回的 403 不带 disabled，内容脚本不会因此退场', async () => {
   upstreamStatus = 403;
-  const response = await handlePageLookupMessage({ type: 'lp-page-lookup', word: 'run' }, SENDER);
+  const response = await handlePageLookupMessage({ type: 'lp-page-lookup', word: 'qwrtplk' }, SENDER);
   assert.equal(response.status, 403);
   assert.equal(response.disabled, undefined);
   assert.equal(response.retry, false);
@@ -322,4 +340,46 @@ test('单词格式不对直接拒绝，不发请求', async () => {
   assert.equal(calls.length, 0);
   const longest = await handlePageLookupMessage({ type: 'lp-page-lookup', word: 'a'.repeat(40) }, SENDER);
   assert.equal(longest.status, 404);
+});
+
+// ---------- 翻译源 ----------
+
+test('默认源是微软翻译：不碰词库，释义来自微软，仍记查词', async () => {
+  delete store.lookupSource;
+  const result = await lookupWord('run');
+  assert.deepEqual(result, { word: 'run', form: 'run', lemma: 'run', phonetic: '', defs: [], gloss: '跑', source: 'mt' });
+  assert.equal(edgeCalls, 1);
+  assert.equal(glossaryCalls(), 0);
+  await flush();
+  assert.deepEqual(updates(), ['run']);
+});
+
+test('有道词典源：按词性拆分释义，丢掉人名义项与省略号', async () => {
+  store.lookupSource = 'youdao';
+  const aroma = await lookupWord('aroma');
+  assert.equal(aroma.source, 'dict');
+  assert.deepEqual(aroma.defs, [{ pos: 'n.', senses: ['芳香，浓香', '（喻）气氛'] }]);
+  const run = await lookupWord('run');
+  assert.deepEqual(run.defs.map((x) => x.pos), ['v.', 'n.']);
+  assert.equal(run.defs[1].senses[0], '跑步');
+  assert.equal(edgeCalls, 0);
+  await flush();
+  assert.deepEqual(updates(), ['aroma', 'run']);
+});
+
+test('首选源没有结果时依次换源：有道没收录 -> 微软', async () => {
+  store.lookupSource = 'youdao';
+  const result = await lookupWord('zyzzyva');
+  assert.equal(result.source, 'mt');
+  assert.equal(result.gloss, '象鼻虫');
+  assert.equal(youdaoCalls, 1);
+  assert.equal(edgeCalls, 1);
+});
+
+test('改了翻译源会清空缓存', async () => {
+  store.lookupSource = 'microsoft';
+  await lookupWord('run');
+  storageSet({ lookupSource: 'youdao' });
+  const again = await lookupWord('run');
+  assert.equal(again.source, 'dict');
 });

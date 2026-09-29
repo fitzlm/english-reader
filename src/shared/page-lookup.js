@@ -7,6 +7,7 @@
 
 import { ApiError, fetchGlossary, request, translateWords } from './api.js';
 import { normalizeForm, shortGloss } from './text.js';
+import { DEFAULT_LOOKUP_SOURCE, microsoftGloss, sourceOrder, youdaoLookup } from './lookup-sources.js';
 
 const MAX_WORD_LENGTH = 40;
 const MAX_CACHE = 500;
@@ -33,7 +34,7 @@ function identityOf(auth) {
 if (globalThis.chrome?.storage?.onChanged) {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
-    if ('apiBase' in changes) {
+    if ('apiBase' in changes || 'lookupSource' in changes) {
       clearPageLookupCache();
       return;
     }
@@ -52,7 +53,12 @@ export function isLookupWord(raw) {
   return typeof raw === 'string' && raw.length > 0 && raw.length <= MAX_WORD_LENGTH && WORD_SHAPE.test(raw);
 }
 
-async function fetchResult(form) {
+async function getLookupSource() {
+  const { lookupSource } = await chrome.storage.local.get('lookupSource');
+  return lookupSource || DEFAULT_LOOKUP_SOURCE;
+}
+
+async function fetchFromLinguipro(form) {
   const data = await fetchGlossary([form]);
   const entry = data.entries && data.entries[form];
   const lemma = entry && data.lemmas ? data.lemmas[entry.lemma] : null;
@@ -67,6 +73,37 @@ async function fetchResult(form) {
     return { form, lemma: lemma ? lemma.word || entry.lemma : form, phonetic: (lemma && lemma.phonetic) || '', defs: [], gloss: glosses[form], source: 'mt' };
   }
   throw new ApiError('没有找到释义', 404);
+}
+
+const FETCHERS = {
+  async microsoft(form) {
+    let gloss;
+    try {
+      gloss = await microsoftGloss(form);
+    } catch (err) {
+      throw new ApiError(err.message, err.status || 0);
+    }
+    return gloss ? { form, lemma: form, phonetic: '', defs: [], gloss, source: 'mt' } : null;
+  },
+  async youdao(form) {
+    const hit = await youdaoLookup(form);
+    return hit ? { form, lemma: form, phonetic: '', defs: hit.defs, gloss: hit.gloss, source: 'dict' } : null;
+  },
+  linguipro: fetchFromLinguipro,
+};
+
+/** 按用户选的源依次尝试，前一个失败或没有结果就换下一个；全部落空抛第一个错误（首选源的失败原因最有参考价值）。 */
+async function fetchResult(form) {
+  let firstError = null;
+  for (const name of sourceOrder(await getLookupSource())) {
+    try {
+      const result = await FETCHERS[name](form);
+      if (result) return result;
+    } catch (err) {
+      if (!firstError) firstError = err;
+    }
+  }
+  throw firstError instanceof ApiError ? firstError : new ApiError('没有找到释义', 404);
 }
 
 /**

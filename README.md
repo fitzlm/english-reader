@@ -120,3 +120,8 @@ npm run package                          # 打包 zip
 
 后端接口在 `english-learning-fastapi` 仓库：`app/services/glossary_service.py`、`app/routers/words.py`。
 服务器地址默认 `https://json-view.org/english`，可在设置页「高级设置」里改。
+
+## 点词翻译源
+
+设置页「点词翻译源」可选：微软翻译（默认）、有道词典（延迟最低，约 0.2 秒）、LinguiPro 词库。首选源没有结果或失败会自动换下一个。
+无论用哪个来源，每次点词都会另向 LinguiPro 后端记一次查词（`/api/update-word`），网站上据此制作闪卡；该记录不阻塞词卡显示。

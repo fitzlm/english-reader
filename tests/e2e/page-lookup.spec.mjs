@@ -208,6 +208,8 @@ test('查词失败显示原因与重试，重试成功', async ({ context, servi
   const fixtures = { context, serviceWorker, server };
   const { calls, page } = await setup(fixtures);
   const card = page.locator(`${CARD} .card`);
+  // 首选源失败会换源，这里让备用源也不可用，才能看到失败态
+  await context.route(/edge\.microsoft\.com|dict\.youdao\.com/, (route) => route.abort());
   calls.state.failGlossary = true;
   await clickText(page, '#dict', 'labyrinth');
   await expect(card.locator('.status')).toHaveText('服务器暂时不可用');

@@ -10,6 +10,7 @@ import {
 } from '../shared/settings.js';
 import { VOCAB_STOPS, formatNumber, nearestStopIndex } from '../shared/text.js';
 import { fetchAccountVocab, fetchMe, getAuth, login, logout, warmUp } from '../shared/api.js';
+import { DEFAULT_LOOKUP_SOURCE, LOOKUP_SOURCES } from '../shared/lookup-sources.js';
 import { captureSelection } from '../capture.js';
 import { mountReader, showHint } from '../overlay.js';
 import { readerUrl, storeDoc } from '../shared/docs.js';
@@ -104,6 +105,13 @@ function bindContextToggle() {
     settings.contextGloss = toggle.checked;
     saveSettings({ contextGloss: toggle.checked });
   });
+}
+
+async function bindLookupSource() {
+  const select = $('lookupSource');
+  const { lookupSource } = await chrome.storage.local.get('lookupSource');
+  select.value = LOOKUP_SOURCES.includes(lookupSource) ? lookupSource : DEFAULT_LOOKUP_SOURCE;
+  select.addEventListener('change', () => chrome.storage.local.set({ lookupSource: select.value }));
 }
 
 // ---------- 认识的词 ----------
@@ -283,6 +291,7 @@ async function main() {
     renderVocab();
   });
   bindContextToggle();
+  bindLookupSource();
   bindKnown();
   renderKnown();
   bindAccount();
