@@ -86,7 +86,7 @@ test('拖选文字冒出翻译按钮，点开显示译文；选区保留，网�
   await expect(card).toHaveClass(/wide/);
   await expect(card.locator('.label')).toHaveText('译文');
   await expect(card.locator('.trans p')).toHaveText([`译：${phrase}`]);
-  await expect(card.locator('.foot')).toHaveText('微软翻译');
+  await expect(card.locator('.foot')).toHaveCount(0);
   expect(edge.requests).toEqual([[phrase]]);
   // 点按钮之后按钮让位给译文卡，选区仍在原网页上
   await expect(button).toHaveCount(0);
@@ -154,7 +154,7 @@ test('双击单词：按钮 -> 词卡，词典命中与机翻都不走微软翻�
   await button.click();
   await expect(card.locator('.word')).toHaveText('ephemeral');
   await expect(card.locator('.defs')).toContainText('短暂的');
-  await expect(card.locator('.foot')).toHaveText('词典');
+  await expect(card.locator('.foot')).toHaveCount(0);
   await expect(card).not.toHaveClass(/wide/);
   // 双击的第一击已经点词查过、记过；按钮再查同一个词不重复记
   await page.waitForTimeout(300);
@@ -170,7 +170,7 @@ test('双击单词：按钮 -> 词卡，词典命中与机翻都不走微软翻�
   await button.click();
   await expect(card.locator('.word')).toHaveText('serendipity');
   await expect(card.locator('.defs')).toContainText('意外发现的好运');
-  await expect(card.locator('.foot')).toHaveText('机器翻译');
+  await expect(card.locator('.foot')).toHaveCount(0);
   expect(edge.requests).toHaveLength(0);
   await page.waitForTimeout(300);
   expect(calls.wordUpdates.map((u) => u.word)).toEqual(['ephemeral', 'serendipity']);
@@ -534,7 +534,7 @@ test('译文没回来就收起或改选：迟到的旧结果不会再弹出来',
 
   await dragText(page, ['#sentence', 'ephemeral stalls']);
   await button.click();
-  await expect(card.locator('.status')).toHaveText('正在翻译…');
+  await expect(card.locator('.status')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(card).toHaveCount(0);
   await page.waitForTimeout(1600);
@@ -545,7 +545,7 @@ test('译文没回来就收起或改选：迟到的旧结果不会再弹出来',
   await page.evaluate(() => window.getSelection().removeAllRanges());
   await dragText(page, ['#sentence', 'ephemeral stalls']);
   await button.click();
-  await expect(card.locator('.status')).toHaveText('正在翻译…');
+  await expect(card.locator('.status')).toHaveCount(0);
   await dragText(page, ['#twin1', 'night market']);
   await expect(card).toHaveCount(0);
   await button.click();
@@ -602,7 +602,7 @@ test('翻译失败给出原因；限流有单独提示；重试成功后显示�
   await card.locator('.retry').click();
   await expect(card.locator('.trans p')).toHaveText(['译：ephemeral stalls']);
   await expect(card.locator('.retry')).toHaveCount(0);
-  await expect(card.locator('.foot')).toHaveText('微软翻译');
+  await expect(card.locator('.foot')).toHaveCount(0);
   expect(edge.requests).toEqual([['ephemeral stalls'], ['ephemeral stalls'], ['ephemeral stalls']]);
 });
 
