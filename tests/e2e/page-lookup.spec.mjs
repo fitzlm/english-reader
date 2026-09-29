@@ -12,7 +12,7 @@ test('词典命中显示释义与来源，并记录查词；词形显示词元',
   await expect(card.locator('.word')).toHaveText('ephemeral');
   await expect(card.locator('.defs')).toContainText('短暂的');
   await expect(card.locator('.ipa')).toHaveText('/ɪˈfemərəl/');
-  await expect(card.locator('.foot')).toHaveText('词典');
+  await expect(card.locator('.foot')).toHaveCount(0);
   await expect(card.locator('.lemma')).toHaveCount(0);
   await expect.poll(() => calls.wordUpdates.map((u) => u.word)).toEqual(['ephemeral']);
   expect(await page.evaluate(() => window.getSelection().toString())).toBe('');
@@ -35,12 +35,12 @@ test('缺词走机翻；短词和撇号词可查；空白、标点不弹卡', as
 
   await clickText(page, '#mt', 'serendipity');
   await expect(card.locator('.defs')).toHaveText('意外发现的好运');
-  await expect(card.locator('.foot')).toHaveText('机器翻译');
+  await expect(card.locator('.foot')).toHaveCount(0);
   expect(calls.translate).toBe(1);
 
   await clickText(page, '#mt', ' a ', { start: 1, length: 1 });
   await expect(card.locator('.word')).toHaveText('a');
-  await expect(card.locator('.foot')).toHaveText('词典');
+  await expect(card.locator('.foot')).toHaveCount(0);
 
   await clickText(page, '#apos', "don't");
   await expect(card.locator('.word')).toHaveText("don't");
@@ -189,15 +189,15 @@ test('连续点两个词只留后一个；收起后的迟到响应不会重开',
 
   // 第一个词在右上角，它的词卡不会盖住第二个词
   await clickText(page, '#corner', 'aroma');
-  await expect(card.locator('.status')).toHaveText('正在查词…');
+  await expect(card.locator('.status')).toHaveCount(0);
   await clickText(page, '#mt', 'serendipity');
-  await expect(card.locator('.foot')).toHaveText('机器翻译');
+  await expect(card.locator('.foot')).toHaveCount(0);
   await page.waitForTimeout(1600);
   await expect(card.locator('.word')).toHaveText('serendipity');
   expect(await hostCount(page)).toBe(1);
 
   await clickText(page, '#dict', 'labyrinth');
-  await expect(card.locator('.status')).toHaveText('正在查词…');
+  await expect(card.locator('.status')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(card).toHaveCount(0);
   await page.waitForTimeout(1600);
@@ -217,7 +217,7 @@ test('查词失败显示原因与重试，重试成功', async ({ context, servi
   calls.state.failGlossary = false;
   await retry.click();
   await expect(card.locator('.defs')).toContainText('迷宫');
-  await expect(card.locator('.foot')).toHaveText('词典');
+  await expect(card.locator('.foot')).toHaveCount(0);
 });
 
 test('站点未开启时后台拒绝，词卡显示原因且无重试', async ({ context, serviceWorker, server }) => {

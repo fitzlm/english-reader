@@ -442,8 +442,8 @@ export function start() {
   }
 
   function renderLoading() {
-    card.box.replaceChildren(head(), el('p', 'status', card.kind === 'text' ? '正在翻译…' : '正在查词…'));
-    placeCard();
+    card.box.replaceChildren();
+    card.box.style.display = 'none';
   }
 
   function renderError(response, failure) {
@@ -474,7 +474,7 @@ export function start() {
     } else {
       list.append(el('li', null, result.gloss || ''));
     }
-    nodes.push(list, el('div', 'foot', result.source === 'mt' ? '机器翻译' : '词典'));
+    nodes.push(list);
     card.box.replaceChildren(...nodes);
     placeCard();
   }
@@ -487,13 +487,15 @@ export function start() {
     }
     const list = el('div', 'trans');
     for (const part of parts) list.append(el('p', null, part));
-    card.box.replaceChildren(head(), list, el('div', 'foot', '微软翻译'));
+    card.box.replaceChildren(head(), list);
     placeCard();
   }
 
   /** 锚点下方 8px；下方放不下就翻到上方（prefer 为 above 则反过来）；上下左右都夹在视口内。 */
   function placeCard() {
-    if (card) placeBox(card.box, card.rect, { prefer: card.prefer });
+    if (!card) return;
+    card.box.style.display = '';
+    placeBox(card.box, card.rect, { prefer: card.prefer });
   }
 
   for (const [type, fn, opts] of docListeners) document.addEventListener(type, fn, opts);

@@ -89,7 +89,7 @@ for (const site of SITES) {
     await page.screenshot({ path: path.join(SHOTS, `live-select-${site.name}-button.png`) });
     await button.click();
     await expect(card.locator('.trans p').first()).toContainText(/[一-鿿]/, { timeout: 20000 });
-    await expect(card.locator('.foot')).toHaveText('微软翻译');
+    await expect(card.locator('.foot')).toHaveCount(0);
     await page.screenshot({ path: path.join(SHOTS, `live-select-${site.name}-card.png`) });
     await page.keyboard.press('Escape');
     await expect(card).toHaveCount(0);
