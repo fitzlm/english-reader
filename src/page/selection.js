@@ -100,13 +100,13 @@ export function createSelectionButton({ suppressed, offer, onActivate }) {
     if (!found) return null;
     const place = buttonPosition({ rects: [...range.getClientRects()], forward: isForward(selection), viewport: viewportSize() });
     if (!place) return null;
-    const { anchor } = place;
+    const { anchor, span } = place;
     return {
       ...found,
       left: place.left,
       top: place.top,
       prefer: place.prefer,
-      rect: { left: place.left, right: place.left + BUTTON_SIZE, top: anchor.top, bottom: anchor.bottom, width: BUTTON_SIZE, height: anchor.height },
+      rect: { left: place.left, right: place.left + BUTTON_SIZE, top: span.top, bottom: span.bottom, width: BUTTON_SIZE, height: span.bottom - span.top },
     };
   }
 

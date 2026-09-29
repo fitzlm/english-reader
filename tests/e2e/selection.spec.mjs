@@ -84,7 +84,7 @@ test('拖选文字冒出翻译按钮，点开显示译文；选区保留，网�
 
   await button.click();
   await expect(card).toHaveClass(/wide/);
-  await expect(card.locator('.label')).toHaveText('译文');
+  await expect(card.locator('.label')).toHaveCount(0);
   await expect(card.locator('.trans p')).toHaveText([`译：${phrase}`]);
   await expect(card.locator('.foot')).toHaveCount(0);
   expect(edge.requests).toEqual([[phrase]]);
@@ -228,9 +228,13 @@ test('查词记账：拖选单词记一次；点词后 3 秒内再用按钮查�
 test('跨段选中：按段翻译，一次请求', async ({ context, serviceWorker, server }) => {
   const { edge, page, button, card } = await start({ context, serviceWorker, server });
 
-  await dragText(page, ['#twin1', 'The night'], ['#twin2', 'one by one.']);
+  const { first: twinFirst, last: twinLast } = await dragText(page, ['#twin1', 'The night'], ['#twin2', 'one by one.']);
   await expect(button).toBeVisible();
   await button.click();
+  await expect(card.locator('.trans p')).toHaveCount(2);
+  // 译文卡不压住选中的文字：整块选区在卡的上方或下方
+  const twinCard = await card.boundingBox();
+  expect(twinCard.y >= twinLast.bottom || twinCard.y + twinCard.height <= twinFirst.top).toBe(true);
   await expect(card.locator('.trans p')).toHaveText([
     '译：The night market opened at dusk.',
     '译：Vendors lit their lanterns one by one.',
@@ -592,7 +596,7 @@ test('翻译失败给出原因；限流有单独提示；重试成功后显示�
   await button.click();
   await expect(card.locator('.status')).toHaveText('翻译服务暂时不可用（503）');
   await expect(card.locator('.foot')).toHaveCount(0);
-  await expect(card.locator('.label')).toHaveText('译文');
+  await expect(card.locator('.label')).toHaveCount(0);
 
   edge.status = 429;
   await card.locator('.retry').click();

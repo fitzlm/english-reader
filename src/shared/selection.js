@@ -91,5 +91,7 @@ export function buttonPosition({ rects, forward, viewport, size = BUTTON_SIZE, m
   }
   left = Math.max(margin, Math.min(left, viewport.width - size - margin));
   top = Math.max(margin, Math.min(top, viewport.height - size - margin));
-  return { left, top, anchor: rectOf(anchor), prefer: forward ? 'below' : 'above' };
+  const spanTop = Math.min(...boxes.map((r) => r.top));
+  const spanBottom = Math.max(...boxes.map((r) => r.bottom));
+  return { left, top, anchor: rectOf(anchor), span: { top: spanTop, bottom: spanBottom }, prefer: forward ? 'below' : 'above' };
 }

@@ -112,21 +112,33 @@ export function viewportSize() {
  */
 export function placeBox(box, rect, { prefer = 'below' } = {}) {
   const { width: viewportWidth, height: viewportHeight } = viewportSize();
-  box.style.maxHeight = `${Math.max(80, Math.min(360, viewportHeight - MARGIN * 2))}px`;
+  const fullMax = Math.max(80, Math.min(360, viewportHeight - MARGIN * 2));
+  box.style.maxHeight = `${fullMax}px`;
   // 只有内容真的要在卡内滚动时才拦住滚轮；否则指针停在卡上（点完按钮就是这样）时页面也滚不动
   box.classList.toggle('scrolls', box.scrollHeight > box.clientHeight + 1);
   const width = box.offsetWidth;
   const height = box.offsetHeight;
   let left = rect.left + rect.width / 2 - Math.min(width / 2, 48);
   left = Math.max(MARGIN, Math.min(left, viewportWidth - width - MARGIN));
-  const below = rect.bottom + GAP;
-  const above = rect.top - GAP - height;
-  const fitsBelow = below + height <= viewportHeight - MARGIN;
-  const fitsAbove = above >= MARGIN;
-  const fallback = Math.max(MARGIN, viewportHeight - MARGIN - height);
-  let top;
-  if (prefer === 'above') top = fitsAbove ? above : fitsBelow ? below : fallback;
-  else top = fitsBelow ? below : fitsAbove ? above : fallback;
+  const spaceBelow = viewportHeight - MARGIN - (rect.bottom + GAP);
+  const spaceAbove = rect.top - GAP - MARGIN;
+  const fitsBelow = height <= spaceBelow;
+  const fitsAbove = height <= spaceAbove;
+  let side = prefer === 'above' ? 'above' : 'below';
+  if (side === 'below' ? !fitsBelow : !fitsAbove) {
+    if (side === 'below' ? fitsAbove : fitsBelow) side = side === 'below' ? 'above' : 'below';
+    // 两边都放不下：放到空间大的一侧，卡内滚动，也不压住选中的文字
+    else side = spaceBelow >= spaceAbove ? 'below' : 'above';
+  }
+  const room = Math.max(80, Math.floor(side === 'below' ? spaceBelow : spaceAbove));
+  let shown = height;
+  if (height > room) {
+    box.style.maxHeight = `${Math.min(fullMax, room)}px`;
+    box.classList.toggle('scrolls', box.scrollHeight > box.clientHeight + 1);
+    shown = box.offsetHeight;
+  }
+  let top = side === 'below' ? rect.bottom + GAP : rect.top - GAP - shown;
+  top = Math.max(MARGIN, Math.min(top, viewportHeight - MARGIN - shown));
   box.style.left = `${Math.round(left)}px`;
   box.style.top = `${Math.round(top)}px`;
 }

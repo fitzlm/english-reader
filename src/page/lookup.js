@@ -427,10 +427,7 @@ export function start() {
 
   function head(result) {
     const row = el('div', 'head');
-    if (card.kind === 'text') {
-      row.append(el('span', 'label', '译文'));
-      return row;
-    }
+    if (card.kind === 'text') return null;
     const { word } = card;
     row.append(el('span', 'word', word));
     if (result) {
@@ -447,7 +444,7 @@ export function start() {
   }
 
   function renderError(response, failure) {
-    const nodes = [head(), el('p', 'status', response.error || failure)];
+    const nodes = [head(), el('p', 'status', response.error || failure)].filter(Boolean);
     if (response.retry) {
       const retry = el('button', 'retry', '重试');
       retry.type = 'button';
@@ -461,7 +458,7 @@ export function start() {
   }
 
   function renderWord(result) {
-    const nodes = [head(result)];
+    const nodes = [head(result)].filter(Boolean);
     const defs = Array.isArray(result.defs) ? result.defs : [];
     const list = el('ul', 'defs');
     if (result.source === 'dict' && defs.length) {
@@ -487,7 +484,7 @@ export function start() {
     }
     const list = el('div', 'trans');
     for (const part of parts) list.append(el('p', null, part));
-    card.box.replaceChildren(head(), list);
+    card.box.replaceChildren(...[head(), list].filter(Boolean));
     placeCard();
   }
 
