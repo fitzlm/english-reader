@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ParagraphTranslationError, translateParagraph } from '../../src/shared/paragraph-translation.js';
+import { ParagraphTranslationError, translateBlocks, translateParagraph } from '../../src/shared/paragraph-translation.js';
 
 function response(status, data) {
   return { ok: status >= 200 && status < 300, status, json: async () => data };
@@ -121,4 +121,48 @@ test('background responds asynchronously only to paragraph translation messages'
   });
   assert.equal(typeof result.error, 'string');
   assert.equal('translation' in result, false);
+});
+
+test('translateBlocks：多段一次请求，每段一条译文，顺序不变', async () => {
+  let request;
+  const result = await translateBlocks(['First line.', 'Second line.', 'Third.'], async (_url, options) => {
+    request = JSON.parse(options.body);
+    return response(200, request.map((_, index) => ({ translations: [{ text: ` 译${index + 1} ` }] })));
+  });
+  assert.deepEqual(request, ['First line.', 'Second line.', 'Third.']);
+  assert.deepEqual(result, ['译1', '译2', '译3']);
+});
+
+test('translateBlocks：超长的一段拆成多个条目，译文仍按原段合并回去', async () => {
+  const long = `${'a'.repeat(4988)}. End. ${'b'.repeat(200)}`;
+  let chunks;
+  const result = await translateBlocks(['short', long, 'tail'], async (_url, options) => {
+    chunks = JSON.parse(options.body);
+    return response(200, chunks.map((_, index) => ({ translations: [{ text: `译${index + 1}` }] })));
+  });
+  assert.equal(chunks.length, 4);
+  assert.equal(chunks[0], 'short');
+  assert.equal(chunks.slice(1, 3).join(''), long);
+  assert.equal(chunks[3], 'tail');
+  assert.deepEqual(result, ['译1', '译2译3', '译4']);
+});
+
+test('translateBlocks：空输入、空白段与超长总量都不发请求', async () => {
+  const unexpectedFetch = () => { throw new Error('fetch should not run'); };
+  await assert.rejects(translateBlocks([], unexpectedFetch), ParagraphTranslationError);
+  await assert.rejects(translateBlocks(['ok', '  '], unexpectedFetch), ParagraphTranslationError);
+  await assert.rejects(translateBlocks(['ok', 42], unexpectedFetch), ParagraphTranslationError);
+  await assert.rejects(translateBlocks('text', unexpectedFetch), ParagraphTranslationError);
+  await assert.rejects(translateBlocks(['a'.repeat(30000), 'b'.repeat(20001)], unexpectedFetch), /内容过长/);
+});
+
+test('translateBlocks：服务端返回条数不符或限流时报可读错误', async () => {
+  await assert.rejects(
+    translateBlocks(['one', 'two'], async () => response(200, [{ translations: [{ text: '一' }] }])),
+    /数量不符/,
+  );
+  await assert.rejects(
+    translateBlocks(['one'], async () => response(429, {})),
+    (err) => err instanceof ParagraphTranslationError && err.status === 429,
+  );
 });

@@ -8,7 +8,7 @@ import { chromium } from '@playwright/test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { expect, installApiMock, readerFrame, selectBetween, test } from './harness.mjs';
+import { SHOTS, expect, installApiMock, readerFrame, selectBetween, test } from './harness.mjs';
 
 const CARD = 'linguipro-lookup';
 
@@ -91,6 +91,10 @@ test('从菜单开启：已打开的同站页面立即可用，刷新与新开�
 
   expect(await storedSites(serviceWorker)).toEqual([server]);
   expect(await registered(serviceWorker)).toEqual([{ id: 'lp-page-lookup', matches: [`${server}/*`] }]);
+  // 菜单里直接告诉用户当前页面已经生效（刚补注入的脚本还在加载，后台会等它，不会误报「重新启用」）
+  await expect(popup.locator('#lookupLive')).toHaveText('✓ 当前页面点词已生效');
+  await expect(popup.locator('#lookupLive')).toHaveAttribute('data-tone', 'ok');
+  await popup.locator('.popup').screenshot({ path: path.join(SHOTS, 'popup-enabled.png') });
 
   // 补注入：两个早已打开的同站标签页都能点词，且每页只有一个实例
   await waitForLookup(first);
@@ -113,6 +117,77 @@ test('从菜单开启：已打开的同站页面立即可用，刷新与新开�
   // 重新打开菜单：显示已开启
   const again = await openPopup(context, extensionId, tabId);
   await expect(again.locator('#lookupToggle')).toBeChecked();
+  await expect(again.locator('#lookupLive')).toHaveText('✓ 当前页面点词已生效');
+});
+
+test('菜单检查当前页面：站点已开启但脚本没在运行（恢复的标签页等）时，就地补上并说明', async ({ context, serviceWorker, extensionId, server }) => {
+  await installApiMock(context);
+  const article = await context.newPage();
+  await article.goto(`${server}/page-lookup.html`);
+  const tabId = await tabIdOf(serviceWorker, `${server}/page-lookup.html`);
+  // 设置里已开启，但这个页面里没有脚本（没注册、也没补注入）：等同浏览器恢复标签页时错过了注册脚本
+  await serviceWorker.evaluate((origin) => chrome.storage.local.set({ pageLookupSites: [origin] }), server);
+  expect(await article.evaluate(() => window.takeovers)).toBe(0);
+  await expectLookupInactive(article);
+
+  const popup = await openPopup(context, extensionId, tabId);
+  await expect(popup.locator('#lookupToggle')).toBeChecked();
+  await expect(popup.locator('#lookupLive')).toHaveText('✓ 已在当前页面重新启用');
+  await expect(popup.locator('#lookupLive')).toHaveAttribute('data-tone', 'ok');
+  await expectLookupWorks(article);
+  expect(await article.evaluate(() => window.takeovers)).toBe(1);
+
+  // 再开一次菜单：这回脚本在线，直接确认，不再补注入
+  const again = await openPopup(context, extensionId, tabId);
+  await expect(again.locator('#lookupLive')).toHaveText('✓ 当前页面点词已生效');
+  expect(await article.evaluate(() => window.takeovers)).toBe(1);
+});
+
+test('菜单里的生效状态：检查慢时先提示「正在检查」，没生效如实说明，关掉开关后迟到的结果不再露出', async ({ context, serviceWorker, extensionId, server }) => {
+  await installApiMock(context);
+  const article = await context.newPage();
+  await article.goto(`${server}/page-lookup.html`);
+  const tabId = await tabIdOf(serviceWorker, `${server}/page-lookup.html`);
+  await serviceWorker.evaluate((origin) => chrome.storage.local.set({ pageLookupSites: [origin] }), server);
+
+  // 把「检查当前页面」这一条换成可控的慢应答，其余消息照旧走后台
+  const popup = await context.newPage();
+  await popup.addInitScript(() => {
+    window.liveReply = { delay: 900, reply: { live: false, healed: false } };
+    const send = chrome.runtime.sendMessage.bind(chrome.runtime);
+    chrome.runtime.sendMessage = (message) => {
+      if (!message || message.type !== 'lp-site-live') return send(message);
+      const { delay, reply } = window.liveReply;
+      return new Promise((resolve) => setTimeout(() => resolve(reply), delay));
+    };
+  });
+  await popup.goto(`chrome-extension://${extensionId}/src/popup/popup.html?tabId=${tabId}`);
+  const status = popup.locator('#lookupLive');
+  await expect(popup.locator('#lookupToggle')).toBeChecked();
+  await expect(status).toBeHidden(); // 一瞬间就完的检查不闪「正在检查」
+  await expect(status).toHaveText('正在检查当前页面…');
+  await expect(status).toHaveText('当前页面暂未生效，刷新页面后再试');
+  await expect(status).toHaveAttribute('data-tone', 'warn');
+
+  // 关掉开关：状态行收起
+  const toggle = popup.locator('#lookupToggle');
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+  await expect(toggle).toBeEnabled();
+  await expect(status).toBeHidden();
+
+  // 重新开启后检查还没回来就又关掉：迟到的「已生效」不能再冒出来
+  await popup.evaluate(() => {
+    window.liveReply = { delay: 1200, reply: { live: true, healed: false } };
+  });
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await expect(toggle).toBeEnabled();
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+  await expect(toggle).toBeEnabled();
+  await popup.waitForTimeout(1600);
+  await expect(status).toBeHidden();
 });
 
 test('拒绝授权：开关弹回、说明原因，不写设置也不注册', async ({ context, serviceWorker, extensionId, server }) => {

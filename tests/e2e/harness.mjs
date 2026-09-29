@@ -214,6 +214,12 @@ export const test = base.extend({
   serviceWorker: async ({ context }, use) => {
     let [worker] = context.serviceWorkers();
     if (!worker) worker = await context.waitForEvent('serviceworker');
+    // 安装事件（含给已开启站点补注入）晚于 service worker 出现约 0.1 秒：先等它跑完，
+    // 否则测试刚写下的站点开关会被它顺手当成「启动补注入」处理，页面里平白多一次注入
+    await expect
+      .poll(() => worker.evaluate(() => chrome.storage.session.get('menuMode').then((stored) => Boolean(stored.menuMode))))
+      .toBe(true);
+    await worker.evaluate(() => globalThis.__lpSiteControl.reinjectEnabledSites());
     await use(worker);
   },
   extensionId: async ({ serviceWorker }, use) => {

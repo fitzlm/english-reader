@@ -126,6 +126,15 @@ async function hasPermission(origin) {
   }
 }
 
+/** true / false 是 Chrome 明确的答复；查询本身出错返回 null（不知道），调用方不能当成「没有权限」。 */
+async function permissionState(origin) {
+  try {
+    return Boolean(await chrome.permissions.contains({ origins: [patternOf(origin)] }));
+  } catch (err) {
+    return null;
+  }
+}
+
 // ---------- 串行化：开关、撤权、核对注册都排队执行，快速连点也不会互相踩 ----------
 
 let queue = Promise.resolve();
@@ -141,9 +150,12 @@ async function syncNow() {
   const stored = Array.isArray(raw) ? raw : [];
   const sites = [];
   for (const origin of stored) {
-    if (isValidOrigin(origin) && !sites.includes(origin) && (await hasPermission(origin))) sites.push(origin);
+    if (!isValidOrigin(origin) || sites.includes(origin)) continue;
+    // 只有 Chrome 明确答复「没有权限」才清掉；查询出错（null）时保留，下次核对再判断，
+    // 否则一次偶发错误就会永久删掉用户的设置并注销脚本
+    if ((await permissionState(origin)) !== false) sites.push(origin);
   }
-  // 只在确实清掉了无效或已失去权限的站点时写回（与同一次读取的快照比较）
+  // 只在确实清掉了无效、重复或已失去权限的站点时写回（与同一次读取的快照比较）
   if (sites.length !== stored.length) await writeSites(sites);
 
   const registered = await chrome.scripting.getRegisteredContentScripts({ ids: [SCRIPT_ID] });
@@ -172,14 +184,38 @@ async function tabsOf(origin) {
   }
 }
 
-/** 给已打开的同站页面补注入 loader；重复注入由 lookup.js 的接管机制去重。 */
+/** 往标签页顶层框架注入 loader；页面正在加载、已关闭或不可注入时返回 false。重复注入由 lookup.js 的接管机制去重。 */
+async function injectLoader(tabId) {
+  try {
+    await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, files: [LOADER] });
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+/** 给已打开的同站页面补注入 loader；失败的忽略，注册脚本会在下次加载时生效。 */
 async function injectOpenTabs(origin) {
-  for (const tab of await tabsOf(origin)) {
-    try {
-      await chrome.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, files: [LOADER] });
-    } catch (err) {
-      // 页面正在加载、已关闭或不可注入：忽略，注册脚本会在下次加载时生效
-    }
+  for (const tab of await tabsOf(origin)) await injectLoader(tab.id);
+}
+
+/** 页面里的点词脚本是否在线：lookup.js 只在实例存活时应答 lp-page-lookup-ping。 */
+async function pingTab(tabId) {
+  try {
+    const response = await chrome.tabs.sendMessage(tabId, { type: 'lp-page-lookup-ping' }, { frameId: 0 });
+    return Boolean(response && response.alive === true);
+  } catch (err) {
+    return false;
+  }
+}
+
+/** loader 补注入后还要动态加载模块才会应答：短暂轮询。 */
+async function waitForPing(tabId, timeout = 1500) {
+  const deadline = Date.now() + timeout;
+  for (;;) {
+    if (await pingTab(tabId)) return true;
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 }
 
@@ -194,9 +230,15 @@ async function stopOpenTabs(origin) {
   } catch (err) {
     return;
   }
-  // 没有点词脚本的页面会直接报错，忽略即可
-  await Promise.allSettled(
-    tabs.map((tab) => chrome.tabs.sendMessage(tab.id, { type: 'lp-page-lookup-stop', origin }, { frameId: 0 })),
+  // 没有点词脚本的页面会直接报错（甚至同步抛出），逐个隔离，一个失败不影响其他标签页
+  await Promise.all(
+    tabs.map(async (tab) => {
+      try {
+        await chrome.tabs.sendMessage(tab.id, { type: 'lp-page-lookup-stop', origin }, { frameId: 0 });
+      } catch (err) {
+        // 该页没有点词脚本
+      }
+    }),
   );
 }
 
@@ -299,6 +341,26 @@ async function siteStatus({ tabId }) {
   return { supported: true, origin: site.origin, host: site.host, enabled: granted && sites.includes(site.origin), granted };
 }
 
+/**
+ * popup 询问当前页的点词脚本是否在线。站点已开启却没有脚本应答（扩展重载后的旧页面、
+ * 浏览器恢复标签页时错过了注册脚本等），就地补注入一次并复查；未开启的站点绝不注入。
+ */
+async function siteLive({ tabId }) {
+  const first = await siteStatus({ tabId });
+  if (!first.supported || !first.enabled) return { live: false, healed: false };
+  if (await pingTab(tabId)) return { live: true, healed: false };
+  // 脚本可能刚注入、模块还在加载（刚开启站点、页面刚加载完）：先等一小会儿，别急着重复注入
+  if (await waitForPing(tabId, 400)) return { live: true, healed: false };
+  return serial(async () => {
+    // 排队期间开关可能已被关掉，重新核对
+    const status = await siteStatus({ tabId });
+    if (!status.supported || !status.enabled) return { live: false, healed: false };
+    await injectLoader(tabId);
+    const live = await waitForPing(tabId);
+    return { live, healed: live };
+  });
+}
+
 async function requireTabOrigin(origin, tabId) {
   if (!isValidOrigin(origin)) throw new Error('站点地址无效');
   const site = await tabSite(tabId);
@@ -309,6 +371,7 @@ const errorOf = (err) => ({ error: (err && err.message) || '操作失败' });
 
 export const SITE_MESSAGE_HANDLERS = {
   'lp-site-status': (message) => siteStatus(message),
+  'lp-site-live': (message) => siteLive(message),
   'lp-site-pending': async (message) => {
     if (!isValidOrigin(message.origin)) return { error: '站点地址无效' };
     await serial(() => setPending(message.origin, message.tabId));

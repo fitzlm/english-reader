@@ -47,6 +47,7 @@ const MT = { zyzzyva: '象鼻虫', bare: '赤裸的', "don't": '不要' };
 let calls;
 let failNetwork;
 let gate; // 设置后，词库请求等它放行
+let upstreamStatus; // 设置后，词库请求直接返回这个状态码
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
@@ -60,6 +61,7 @@ globalThis.fetch = async (url, init = {}) => {
   if (failNetwork) throw new TypeError('Failed to fetch');
   if (pathname === '/english/api/words/glossary') {
     if (gate) await gate;
+    if (upstreamStatus) return json({ detail: 'upstream says no' }, upstreamStatus);
     const entries = {};
     const lemmas = {};
     const missing = [];
@@ -95,6 +97,7 @@ beforeEach(() => {
   calls = [];
   failNetwork = false;
   gate = null;
+  upstreamStatus = 0;
   store.apiBase = 'https://example.test/english';
   store.auth = { token: 'guest-token-1', kind: 'guest' };
   store.pageLookupSites = ['https://example.com'];
@@ -188,6 +191,36 @@ test('缓存命中不再查词库，但每次点击都记查词', async () => {
   assert.deepEqual(updates(), ['run', 'ran', 'run']);
 });
 
+test('record:false 不再记查词，结果照常返回（含缓存命中）；默认仍然记', async () => {
+  const first = await lookupWord('run', { record: false });
+  assert.equal(first.gloss, '跑；奔跑；跑步');
+  await flush();
+  assert.deepEqual(updates(), []);
+  const cached = await lookupWord('Run', { record: false });
+  assert.equal(cached.word, 'Run');
+  assert.equal(glossaryCalls(), 1);
+  await lookupWord('run');
+  await lookupWord('run', {});
+  await flush();
+  assert.deepEqual(updates(), ['run', 'run']);
+});
+
+test('消息里 record 只有明确写 false 才不记；其余（缺省、真值、乱写）照常记', async () => {
+  for (const record of [false, undefined, true, 0, 'no', null]) {
+    calls = [];
+    const message = { type: 'lp-page-lookup', word: 'run' };
+    if (record !== undefined) message.record = record;
+    const result = await handlePageLookupMessage(message, SENDER);
+    assert.equal(result.gloss, '跑；奔跑；跑步');
+    await flush();
+    assert.equal(updates().length, record === false ? 0 : 1, `record=${String(record)}`);
+  }
+  calls = [];
+  assert.equal((await handlePageLookupMessage({ type: 'lp-page-lookup', word: 'run', record: false }, { ...SENDER, frameId: 3 })).disabled, true);
+  await flush();
+  assert.deepEqual(calls, []); // 闸门拒绝时什么请求都不发
+});
+
 test('并发的同词查询共用一次请求', async () => {
   let release;
   gate = new Promise((resolve) => {
@@ -252,7 +285,7 @@ test('缓存清空时在途的结果不写回缓存', async () => {
 
 test('来源校验：只接受已开启站点顶层页面里本扩展的内容脚本', async () => {
   const ask = (sender, word = 'run') => handlePageLookupMessage({ type: 'lp-page-lookup', word }, sender);
-  const forbidden = { error: '本站点未开启点词翻译', status: 403, retry: false };
+  const forbidden = { error: '本站点未开启点词翻译', status: 403, retry: false, disabled: true };
 
   assert.deepEqual(await ask({ ...SENDER, origin: 'https://other.com', url: 'https://other.com/' }), forbidden);
   assert.deepEqual(await ask({ ...SENDER, origin: 'https://sub.example.com', url: 'https://sub.example.com/' }), forbidden);
@@ -271,6 +304,14 @@ test('来源校验：只接受已开启站点顶层页面里本扩展的内容�
   store.pageLookupSites = ['https://example.com'];
   const ok = await ask({ id: EXT_ID, tab: { id: 1 }, frameId: 0, url: 'https://example.com/a' });
   assert.equal(ok.source, 'dict');
+});
+
+test('上游接口自己返回的 403 不带 disabled，内容脚本不会因此退场', async () => {
+  upstreamStatus = 403;
+  const response = await handlePageLookupMessage({ type: 'lp-page-lookup', word: 'run' }, SENDER);
+  assert.equal(response.status, 403);
+  assert.equal(response.disabled, undefined);
+  assert.equal(response.retry, false);
 });
 
 test('单词格式不对直接拒绝，不发请求', async () => {

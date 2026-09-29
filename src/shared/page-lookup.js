@@ -71,13 +71,13 @@ async function fetchResult(form) {
 
 /**
  * 查一个词：{word, form, lemma, phonetic, defs, gloss, source: 'dict'|'mt'}。
- * 每次调用都记一次查词（和阅读页点词一样），缓存命中也记。
+ * 每次调用都记一次查词（和阅读页点词一样），缓存命中也记；record:false 是同一次操作已经记过了（不记）。
  * 失败抛 ApiError：status 0 是网络/超时，404 是没有释义，400 是单词格式不对。
  */
-export async function lookupWord(raw) {
+export async function lookupWord(raw, { record = true } = {}) {
   if (!isLookupWord(raw)) throw new ApiError('单词格式不正确', 400);
   const form = formOf(raw);
-  request(`/api/update-word/${encodeURIComponent(form)}`, { method: 'POST', body: { context: {} } }).catch(() => {});
+  if (record) request(`/api/update-word/${encodeURIComponent(form)}`, { method: 'POST', body: { context: {} } }).catch(() => {});
 
   const cached = cache.get(form);
   if (cached) {
@@ -122,8 +122,12 @@ function senderOrigin(sender) {
   }
 }
 
+/** 闸门拒绝的应答。disabled 是给内容脚本的明确信号（本站已被关掉，可以自行退场），
+ *  和上游接口自己返回的 403 区分开。 */
+export const SITE_DISABLED = Object.freeze({ error: '本站点未开启点词翻译', status: 403, retry: false, disabled: true });
+
 /** 只接受已开启站点顶层页面里本扩展内容脚本发来的消息。 */
-async function isAllowedSender(sender) {
+export async function isAllowedSender(sender) {
   if (!sender || sender.id !== chrome.runtime.id || !sender.tab || sender.frameId !== 0) return false;
   const origin = senderOrigin(sender);
   if (!origin) return false;
@@ -132,13 +136,13 @@ async function isAllowedSender(sender) {
 }
 
 /**
- * 处理 {type:'lp-page-lookup', word}：成功返回查词结果，
- * 失败返回 {error, status, retry}。消息里只有词，不接受任何请求地址。
+ * 处理 {type:'lp-page-lookup', word, record?}：成功返回查词结果，
+ * 失败返回 {error, status, retry}。消息里只有词（和一个「不必再记」的标记），不接受任何请求地址。
  */
 export async function handlePageLookupMessage(message, sender) {
   try {
-    if (!(await isAllowedSender(sender))) return { error: '本站点未开启点词翻译', status: 403, retry: false };
-    return await lookupWord(message && message.word);
+    if (!(await isAllowedSender(sender))) return SITE_DISABLED;
+    return await lookupWord(message && message.word, { record: !message || message.record !== false });
   } catch (err) {
     const status = err instanceof ApiError ? err.status : 0;
     return { error: (err && err.message) || '查词失败', status, retry: isRetryable(err) };

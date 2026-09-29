@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Selection Fixture</title>
+  <style>
+    body { max-width: 900px; margin: 32px auto; font: 20px/1.5 Georgia, serif; color: #222; }
+    p, ul, pre, textarea { margin: 0 0 14px; }
+    textarea { display: block; width: 600px; height: 60px; font: inherit; }
+    pre { font: 16px/1.4 Menlo, monospace; background: #f3f1ec; padding: 8px 12px; }
+    #edge { position: fixed; right: 6px; bottom: 6px; margin: 0; }
+    #corner { position: fixed; right: 6px; top: 6px; margin: 0; }
+    .spacer { height: 1600px; }
+  </style>
+  <script>
+    // 测试用：数一数点词实例派发过几次接管事件；页面自己的点击、选择事件也记一笔，验证插件不打扰网页
+    window.takeovers = 0;
+    document.addEventListener('lp-page-lookup:takeover', () => { window.takeovers += 1; });
+    window.pageEvents = { click: 0, mousedown: 0, mouseup: 0 };
+    for (const name of Object.keys(window.pageEvents)) document.addEventListener(name, () => { window.pageEvents[name] += 1; });
+  </script>
+</head>
+<body>
+  <p id="sentence">The ephemeral stalls were dismantled before dawn, and the labyrinth of lanes went quiet.</p>
+  <p id="twin1">The night market opened at dusk.</p>
+  <p id="twin2">Vendors lit their lanterns one by one.</p>
+  <p id="words">One ephemeral word and one serendipity word.</p>
+  <ul id="list">
+    <li id="item1">First item of the list</li>
+    <li id="item2">Second item of the list</li>
+  </ul>
+  <p id="hyphen">A well-known landmark stood at the corner.</p>
+  <p id="cn">夜市在黄昏时分开张，摊主们一盏一盏点亮灯笼。</p>
+  <p id="ident">Set user_id from https://example.com/path before the call.</p>
+  <p id="quote">She said, “Look at the sizzling wok,” and smiled.</p>
+  <pre id="pre">const greeting = 'hello brave new world';</pre>
+  <p id="codeline">Call <code id="inlinecode">light the lantern</code> to begin.</p>
+  <textarea id="area">The ephemeral editor wrote several words here.</textarea>
+  <p><input id="field" size="40" value="relentless input with several words"></p>
+  <div id="editable" contenteditable="true">The meticulous editor wrote this line.</div>
+  <p id="links">Read the <a id="link" href="#target">municipal notice board</a> today.</p>
+  <p id="long"></p>
+  <p id="corner">aroma of the market</p>
+  <p id="edge">cacophony of the market</p>
+  <div class="spacer"></div>
+  <p id="target">Target section.</p>
+  <script>
+    document.getElementById('long').textContent = 'lorem ipsum dolor sit amet '.repeat(130).trim();
+  </script>
+</body>
+</html>

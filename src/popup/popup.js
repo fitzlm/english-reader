@@ -9,16 +9,25 @@ const DENIED = '未获得本站点访问权限，点词翻译保持关闭';
 
 const toggle = document.getElementById('lookupToggle');
 const notice = document.getElementById('lookupNotice');
+const live = document.getElementById('lookupLive');
 const hostLabel = document.getElementById('siteHost');
 
 let tabId = null;
 let site = null; // {origin, host}
+let liveRun = 0; // 「当前页面是否生效」检查的序号：只认最近一次的结果
 
 /** tone: 'info' 说明性（不支持的页面），'error' 操作失败。 */
 function showNotice(text, tone = 'error') {
   notice.textContent = text || '';
   notice.hidden = !text;
   notice.dataset.tone = tone;
+}
+
+/** tone: 'info' 检查中，'ok' 已生效，'warn' 没生效。 */
+function showLive(text, tone = 'info') {
+  live.textContent = text || '';
+  live.hidden = !text;
+  live.dataset.tone = tone;
 }
 
 function send(message) {
@@ -37,9 +46,30 @@ async function resolveTabId() {
   return tab ? tab.id : null;
 }
 
+/**
+ * 已开启的站点：确认当前页面里的点词脚本真的在运行。没在运行（页面早于开启就打开了、
+ * 浏览器恢复的标签页）时，后台会就地补注入一次再复查。
+ */
+async function checkLive() {
+  const run = ++liveRun;
+  showLive('');
+  if (!site || !toggle.checked) return;
+  // 检查通常一瞬间就完；超过半秒才露出「正在检查」，免得一闪而过
+  const slow = setTimeout(() => {
+    if (run === liveRun) showLive('正在检查当前页面…');
+  }, 400);
+  const result = await send({ type: 'lp-site-live', tabId });
+  clearTimeout(slow);
+  if (run !== liveRun) return;
+  if (result && !result.error && result.live) showLive(result.healed ? '✓ 已在当前页面重新启用' : '✓ 当前页面点词已生效', 'ok');
+  else showLive('当前页面暂未生效，刷新页面后再试', 'warn');
+}
+
 async function refresh() {
   const status = tabId == null ? null : await send({ type: 'lp-site-status', tabId });
   if (!status || status.error || !status.supported) {
+    liveRun += 1;
+    showLive('');
     site = null;
     hostLabel.textContent = '';
     toggle.checked = false;
@@ -52,6 +82,7 @@ async function refresh() {
   hostLabel.title = status.origin;
   toggle.checked = Boolean(status.enabled);
   toggle.disabled = false;
+  checkLive();
 }
 
 function enable() {
@@ -76,6 +107,7 @@ function enable() {
         showNotice(result.error);
       } else {
         toggle.checked = true;
+        checkLive();
       }
     })
     .finally(() => {
@@ -86,6 +118,8 @@ function enable() {
 async function disable() {
   toggle.disabled = true;
   showNotice('');
+  liveRun += 1;
+  showLive('');
   const result = await send({ type: 'lp-site-disable', origin: site.origin });
   if (result && result.error) showNotice(result.error);
   await refresh();

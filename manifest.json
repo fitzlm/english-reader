@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LinguiPro 静读",
   "short_name": "静读",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "选中英文，右键「用静读打开」：排成舒服的阅读版式，并按你的词汇量标出生词、附上释义。",
   "minimum_chrome_version": "120",
   "icons": {
@@ -45,7 +45,7 @@
       "matches": ["<all_urls>"]
     },
     {
-      "resources": ["src/page/lookup.js", "src/shared/text.js"],
+      "resources": ["src/page/lookup.js", "src/page/selection.js", "src/page/ui.js", "src/shared/selection.js", "src/shared/text.js"],
       "matches": ["http://*/*", "https://*/*"]
     }
   ]

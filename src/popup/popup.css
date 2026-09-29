@@ -11,6 +11,7 @@
   --card: #fffdf8;
   --accent: #b25a2c;
   --danger: #b3261e;
+  --ok: #3f7d4e;
   --font-ui: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
 }
 
@@ -26,6 +27,7 @@
     --card: #232120;
     --accent: #e3a06b;
     --danger: #f2b8b5;
+    --ok: #8fc9a0;
   }
 }
 
@@ -109,6 +111,20 @@ body {
 
 .notice[data-tone="info"] {
   color: var(--muted);
+}
+
+.live {
+  margin: 8px 2px 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.live[data-tone="ok"] {
+  color: var(--ok);
+}
+
+.live[data-tone="warn"] {
+  color: var(--danger);
 }
 
 .switch {

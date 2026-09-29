@@ -9,6 +9,7 @@ import { captureSelection } from './capture.js';
 import { mountReader, showHint } from './overlay.js';
 import { readerUrl, storeDoc } from './shared/docs.js';
 import { handlePageLookupMessage } from './shared/page-lookup.js';
+import { handlePageTranslateMessage } from './shared/page-translate.js';
 import { translateParagraph } from './shared/paragraph-translation.js';
 import {
   SITE_MESSAGE_HANDLERS,
@@ -43,13 +44,14 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
     });
   });
   if (reason === 'install') chrome.runtime.openOptionsPage();
-  // 核对点词站点的设置、权限与脚本注册；更新后旧版内容脚本成了孤儿，给已开启站点补注入新版
-  if (reason === 'update') reinjectEnabledSites().catch(() => {});
-  else syncRegistration().catch(() => {});
+  // 核对点词站点的设置、权限与脚本注册，并给已开启站点里已打开的页面补注入：
+  // 更新或重载后旧版内容脚本成了孤儿；重装、开发者模式加载时已打开的页面也没有脚本
+  reinjectEnabledSites().catch(() => {});
 });
 
+// 浏览器启动：注册脚本只管之后加载的页面，启动时已经恢复出来的标签页要补注入一次
 chrome.runtime.onStartup.addListener(() => {
-  syncRegistration().catch(() => {});
+  reinjectEnabledSites().catch(() => {});
 });
 
 chrome.permissions.onAdded.addListener((permissions) => {
@@ -77,6 +79,7 @@ const MESSAGE_HANDLERS = {
       (err) => ({ error: err.message || '翻译失败', ...(err.status ? { status: err.status } : {}) }),
     ),
   'lp-page-lookup': (message, sender) => handlePageLookupMessage(message, sender),
+  'lp-page-translate': (message, sender) => handlePageTranslateMessage(message, sender),
   // popup 发来的站点开关与打开静读：只接受扩展自己的页面
   ...Object.fromEntries(Object.entries(SITE_MESSAGE_HANDLERS).map(([type, fn]) => [type, extensionPageOnly(fn)])),
   'lp-open-reader': extensionPageOnly(async (message) => {
@@ -169,6 +172,7 @@ globalThis.__lpSiteControl = {
   enableSite,
   disableSite,
   syncRegistration,
+  reinjectEnabledSites,
   onPermissionsAdded,
   onPermissionsRemoved,
   // 带伪造 sender 调消息分发，验证来源闸门
