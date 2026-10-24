@@ -2,6 +2,7 @@
 //
 // 不碰 DOM 和 chrome.*，Node 单测直接跑；DOM 渲染与消息收发在 captions.js。
 
+import { scaffoldFor } from '../shared/scaffold.js';
 import { WORD_RE, isIdentifierLike, normalizeForm } from '../shared/text.js';
 
 /** layer.caption.show 的聚合窗口：每个视频每 60 秒最多一条。 */
@@ -71,14 +72,16 @@ export function formsOf(lines) {
 // ---------- 三态决策 ----------
 
 /**
- * 词的学习状态 -> 显示方式：
- *   known / 没查到状态 -> plain（原样）；
- *   learning -> blank（与词等宽的下划线空白），已揭示的词 -> revealed（显示原词）；
- *   unknown -> unknown（原词，下方带注释；注释还没取到时没有 gloss 字段）。
+ * 词的学习状态 -> 显示方式。画法由 shared/scaffold.js 的 scaffoldFor(state, null, 'captions') 定，这里只把它落成字幕层的条目：
+ *   plain（known / 没查到状态）-> plain（原样）；
+ *   blank（learning）-> blank（与词等宽的下划线空白），已揭示的词 -> revealed（显示原词）；
+ *   gloss（unknown）-> unknown（原词，下方带注释；注释还没取到时没有 gloss 字段）。
+ * 插件的学习者模型只有 known / learning / unknown 三态，不会出现 scaffoldFor 里同样给 gloss 的 seen。
  */
 export function decideToken(state, { revealed = false, gloss = '' } = {}) {
-  if (state === 'learning') return revealed ? { kind: 'revealed' } : { kind: 'blank' };
-  if (state === 'unknown') return gloss ? { kind: 'unknown', gloss } : { kind: 'unknown' };
+  const s = scaffoldFor(state, null, 'captions');
+  if (s === 'blank') return revealed ? { kind: 'revealed' } : { kind: 'blank' };
+  if (s === 'gloss') return gloss ? { kind: 'unknown', gloss } : { kind: 'unknown' };
   return { kind: 'plain' };
 }
 

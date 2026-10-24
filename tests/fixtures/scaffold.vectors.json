@@ -1,0 +1,524 @@
+[
+  {
+    "state": "known",
+    "modalities": null,
+    "surface": "film-graduation",
+    "expected": "blank"
+  },
+  {
+    "state": "known",
+    "modalities": {
+      "seen": 3,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1,
+      "cloze": 5
+    },
+    "surface": "film-graduation",
+    "expected": "blank"
+  },
+  {
+    "state": "known",
+    "modalities": {
+      "seen": 4,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1
+    },
+    "surface": "film-graduation",
+    "expected": "blank"
+  },
+  {
+    "state": "mastered",
+    "modalities": null,
+    "surface": "film-graduation",
+    "expected": "blank"
+  },
+  {
+    "state": "mastered",
+    "modalities": {
+      "seen": 3,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1,
+      "cloze": 5
+    },
+    "surface": "film-graduation",
+    "expected": "blank"
+  },
+  {
+    "state": "mastered",
+    "modalities": {
+      "seen": 4,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1
+    },
+    "surface": "film-graduation",
+    "expected": "blank"
+  },
+  {
+    "state": "learning",
+    "modalities": null,
+    "surface": "film-graduation",
+    "expected": "plain"
+  },
+  {
+    "state": "learning",
+    "modalities": {
+      "seen": 3,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1,
+      "cloze": 5
+    },
+    "surface": "film-graduation",
+    "expected": "plain"
+  },
+  {
+    "state": "learning",
+    "modalities": {
+      "seen": 4,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1
+    },
+    "surface": "film-graduation",
+    "expected": "plain"
+  },
+  {
+    "state": "seen",
+    "modalities": null,
+    "surface": "film-graduation",
+    "expected": "plain"
+  },
+  {
+    "state": "seen",
+    "modalities": {
+      "seen": 3,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1,
+      "cloze": 5
+    },
+    "surface": "film-graduation",
+    "expected": "plain"
+  },
+  {
+    "state": "seen",
+    "modalities": {
+      "seen": 4,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1
+    },
+    "surface": "film-graduation",
+    "expected": "plain"
+  },
+  {
+    "state": "unknown",
+    "modalities": null,
+    "surface": "film-graduation",
+    "expected": "plain"
+  },
+  {
+    "state": "unknown",
+    "modalities": {
+      "seen": 3,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1,
+      "cloze": 5
+    },
+    "surface": "film-graduation",
+    "expected": "plain"
+  },
+  {
+    "state": "unknown",
+    "modalities": {
+      "seen": 4,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1
+    },
+    "surface": "film-graduation",
+    "expected": "plain"
+  },
+  {
+    "state": null,
+    "modalities": null,
+    "surface": "film-graduation",
+    "expected": "plain"
+  },
+  {
+    "state": null,
+    "modalities": {
+      "seen": 3,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1,
+      "cloze": 5
+    },
+    "surface": "film-graduation",
+    "expected": "plain"
+  },
+  {
+    "state": null,
+    "modalities": {
+      "seen": 4,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1
+    },
+    "surface": "film-graduation",
+    "expected": "plain"
+  },
+  {
+    "state": "known",
+    "modalities": null,
+    "surface": "captions",
+    "expected": "plain"
+  },
+  {
+    "state": "known",
+    "modalities": {
+      "seen": 3,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1,
+      "cloze": 5
+    },
+    "surface": "captions",
+    "expected": "plain"
+  },
+  {
+    "state": "known",
+    "modalities": {
+      "seen": 4,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1
+    },
+    "surface": "captions",
+    "expected": "plain"
+  },
+  {
+    "state": "mastered",
+    "modalities": null,
+    "surface": "captions",
+    "expected": "plain"
+  },
+  {
+    "state": "mastered",
+    "modalities": {
+      "seen": 3,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1,
+      "cloze": 5
+    },
+    "surface": "captions",
+    "expected": "plain"
+  },
+  {
+    "state": "mastered",
+    "modalities": {
+      "seen": 4,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1
+    },
+    "surface": "captions",
+    "expected": "plain"
+  },
+  {
+    "state": "learning",
+    "modalities": null,
+    "surface": "captions",
+    "expected": "blank"
+  },
+  {
+    "state": "learning",
+    "modalities": {
+      "seen": 3,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1,
+      "cloze": 5
+    },
+    "surface": "captions",
+    "expected": "blank"
+  },
+  {
+    "state": "learning",
+    "modalities": {
+      "seen": 4,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1
+    },
+    "surface": "captions",
+    "expected": "blank"
+  },
+  {
+    "state": "seen",
+    "modalities": null,
+    "surface": "captions",
+    "expected": "gloss"
+  },
+  {
+    "state": "seen",
+    "modalities": {
+      "seen": 3,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1,
+      "cloze": 5
+    },
+    "surface": "captions",
+    "expected": "gloss"
+  },
+  {
+    "state": "seen",
+    "modalities": {
+      "seen": 4,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1
+    },
+    "surface": "captions",
+    "expected": "gloss"
+  },
+  {
+    "state": "unknown",
+    "modalities": null,
+    "surface": "captions",
+    "expected": "gloss"
+  },
+  {
+    "state": "unknown",
+    "modalities": {
+      "seen": 3,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1,
+      "cloze": 5
+    },
+    "surface": "captions",
+    "expected": "gloss"
+  },
+  {
+    "state": "unknown",
+    "modalities": {
+      "seen": 4,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1
+    },
+    "surface": "captions",
+    "expected": "gloss"
+  },
+  {
+    "state": null,
+    "modalities": null,
+    "surface": "captions",
+    "expected": "plain"
+  },
+  {
+    "state": null,
+    "modalities": {
+      "seen": 3,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1,
+      "cloze": 5
+    },
+    "surface": "captions",
+    "expected": "plain"
+  },
+  {
+    "state": null,
+    "modalities": {
+      "seen": 4,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1
+    },
+    "surface": "captions",
+    "expected": "plain"
+  },
+  {
+    "state": "known",
+    "modalities": null,
+    "surface": "immersion",
+    "expected": "plain"
+  },
+  {
+    "state": "known",
+    "modalities": {
+      "seen": 3,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1,
+      "cloze": 5
+    },
+    "surface": "immersion",
+    "expected": "plain"
+  },
+  {
+    "state": "known",
+    "modalities": {
+      "seen": 4,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1
+    },
+    "surface": "immersion",
+    "expected": "plain"
+  },
+  {
+    "state": "mastered",
+    "modalities": null,
+    "surface": "immersion",
+    "expected": "plain"
+  },
+  {
+    "state": "mastered",
+    "modalities": {
+      "seen": 3,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1,
+      "cloze": 5
+    },
+    "surface": "immersion",
+    "expected": "plain"
+  },
+  {
+    "state": "mastered",
+    "modalities": {
+      "seen": 4,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1
+    },
+    "surface": "immersion",
+    "expected": "plain"
+  },
+  {
+    "state": "learning",
+    "modalities": null,
+    "surface": "immersion",
+    "expected": "gloss"
+  },
+  {
+    "state": "learning",
+    "modalities": {
+      "seen": 3,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1,
+      "cloze": 5
+    },
+    "surface": "immersion",
+    "expected": "gloss"
+  },
+  {
+    "state": "learning",
+    "modalities": {
+      "seen": 4,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1
+    },
+    "surface": "immersion",
+    "expected": "plain"
+  },
+  {
+    "state": "seen",
+    "modalities": null,
+    "surface": "immersion",
+    "expected": "plain"
+  },
+  {
+    "state": "seen",
+    "modalities": {
+      "seen": 3,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1,
+      "cloze": 5
+    },
+    "surface": "immersion",
+    "expected": "plain"
+  },
+  {
+    "state": "seen",
+    "modalities": {
+      "seen": 4,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1
+    },
+    "surface": "immersion",
+    "expected": "plain"
+  },
+  {
+    "state": "unknown",
+    "modalities": null,
+    "surface": "immersion",
+    "expected": "plain"
+  },
+  {
+    "state": "unknown",
+    "modalities": {
+      "seen": 3,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1,
+      "cloze": 5
+    },
+    "surface": "immersion",
+    "expected": "plain"
+  },
+  {
+    "state": "unknown",
+    "modalities": {
+      "seen": 4,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1
+    },
+    "surface": "immersion",
+    "expected": "plain"
+  },
+  {
+    "state": null,
+    "modalities": null,
+    "surface": "immersion",
+    "expected": "plain"
+  },
+  {
+    "state": null,
+    "modalities": {
+      "seen": 3,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1,
+      "cloze": 5
+    },
+    "surface": "immersion",
+    "expected": "plain"
+  },
+  {
+    "state": null,
+    "modalities": {
+      "seen": 4,
+      "heard": 2,
+      "spoken": 1,
+      "written": 1
+    },
+    "surface": "immersion",
+    "expected": "plain"
+  }
+]

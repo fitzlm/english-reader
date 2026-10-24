@@ -2,6 +2,7 @@
 //
 // 不碰 DOM 和 chrome.*，Node 单测直接跑；遍历、包裹与还原在 immersion.js。
 
+import { scaffoldFor } from '../shared/scaffold.js';
 import { WORD_RE, isIdentifierLike, normalizeForm } from '../shared/text.js';
 import { GLOSS_MAX_CHARS, truncateGloss } from './captions-core.js';
 import { HOST_TAG, READER_TAG, SELECT_TAG } from './ui.js';
@@ -82,6 +83,8 @@ export function prepareItems(items) {
   for (const item of items) {
     if (out.size >= MAX_ITEMS) break;
     if (!item || typeof item.word !== 'string' || typeof item.gloss !== 'string') continue;
+    // 词表来自后端，全是在学（learning）的词；是否加注由 scaffoldFor 说了算（modalities 未知：learning -> gloss，和此前一致）
+    if (scaffoldFor('learning', null, 'immersion') !== 'gloss') continue;
     const form = normalizeForm(item.word.trim());
     // 页面分词不会产出带连字符的词（连字符把词拆成两个），这样的词形永远命中不了
     if (!form || form.includes('-') || out.has(form)) continue;

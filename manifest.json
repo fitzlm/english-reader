@@ -53,6 +53,7 @@
         "src/page/captions-core.js",
         "src/page/immersion.js",
         "src/page/immersion-core.js",
+        "src/shared/scaffold.js",
         "src/shared/selection.js",
         "src/shared/text.js"
       ],
