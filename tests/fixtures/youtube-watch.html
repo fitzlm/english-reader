@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>fake watch page</title>
+    <!--
+      模拟 YouTube 观看页的播放器与字幕 DOM（类名取自对真实页面结构的一般了解）：
+      #movie_player > .ytp-caption-window-container > .caption-window > .captions-text > .caption-visual-line > .ytp-caption-segment
+      e2e 把 https://www.youtube.com/watch?v=fake 路由到这个文件。
+      window.showCaption(lines)  整体替换当前字幕（[] 清空）；window.startCycle(毫秒) 让字幕自己定时轮换；URL 参数 ?late=毫秒 让字幕容器延迟出现，
+                                 ?structure=segments|bare 去掉 .caption-visual-line 一层 / 去掉所有字幕类名，?root=类名 改掉容器的类名（模拟播放器改版），
+                                 ?pos=middle|top 把字幕窗口挪到播放器中间 / 顶部（YouTube 允许用户拖动字幕）。
+      window.navigateTo(path)    模拟站内导航：pushState + 派发 yt-navigate-finish（和 YouTube 一样不重新加载页面）。
+      window.playerClicks        播放器收到的点击次数（学习层不该挡住点击）。
+    -->
+    <style>
+      html, body { margin: 0; background: #0f0f0f; color: #ddd; font: 14px/1.4 -apple-system, "Segoe UI", sans-serif; }
+      #page { padding: 24px 0 0; }
+      #movie_player {
+        position: relative; width: 800px; height: 450px; margin: 0 auto; overflow: hidden;
+        background: linear-gradient(160deg, #35506b 0%, #1d2b3a 55%, #0d141c 100%);
+      }
+      .ytp-caption-window-container { position: absolute; inset: 0; pointer-events: none; }
+      .caption-window {
+        position: absolute; left: 50%; bottom: 8%; width: 70%; transform: translateX(-50%);
+        text-align: center; overflow: hidden;
+      }
+      .captions-text { display: block; }
+      .caption-visual-line { display: block; }
+      .ytp-caption-segment {
+        display: inline-block; white-space: pre-wrap; padding: 1px 6px;
+        background: rgba(8, 8, 8, 0.75); color: #fff; font: 22px/1.35 Roboto, Arial, sans-serif;
+      }
+      #controls { width: 800px; margin: 12px auto; }
+      #controls button { font: inherit; padding: 4px 10px; }
+      #spacer { height: 1400px; }
+    </style>
+  </head>
+  <body>
+    <div id="page">
+      <div id="movie_player" class="html5-video-player"></div>
+      <div id="controls">
+        <button id="fs" type="button">fullscreen</button>
+        <button id="exitfs" type="button">exit fullscreen</button>
+      </div>
+      <div id="spacer"></div>
+    </div>
+    <script>
+      window.playerClicks = 0;
+      const player = document.getElementById('movie_player');
+      const params = new URLSearchParams(location.search);
+      player.addEventListener('click', () => {
+        window.playerClicks += 1;
+      });
+      document.getElementById('fs').addEventListener('click', () => player.requestFullscreen());
+      document.getElementById('exitfs').addEventListener('click', () => document.exitFullscreen());
+
+      const structure = params.get('structure') || 'standard';
+      let current = []; // 当前应显示的字幕行；容器还没出现时先记着，容器出现后补画
+      let container = null;
+
+      function paint() {
+        if (!container) return;
+        container.replaceChildren();
+        if (!current.length) return;
+        const win = document.createElement('div');
+        win.className = 'caption-window ytp-caption-window-bottom';
+        win.id = 'caption-window-1';
+        if (params.get('pos') === 'top') win.style.cssText = 'top: 3%; bottom: auto;';
+        if (params.get('pos') === 'middle') win.style.cssText = 'bottom: 45%;';
+        if (structure === 'bare') {
+          // 认不出任何字幕类名：只剩文字
+          for (const line of current) {
+            const div = document.createElement('div');
+            div.textContent = line;
+            win.append(div);
+          }
+        } else {
+          const text = document.createElement('span');
+          text.className = 'captions-text';
+          for (const line of current) {
+            const segment = document.createElement('span');
+            segment.className = 'ytp-caption-segment';
+            segment.textContent = line;
+            if (structure === 'segments') {
+              text.append(segment);
+            } else {
+              const row = document.createElement('span');
+              row.className = 'caption-visual-line';
+              row.append(segment);
+              text.append(row);
+            }
+          }
+          win.append(text);
+        }
+        container.append(win);
+      }
+
+      window.showCaption = (lines) => {
+        current = lines;
+        paint();
+      };
+
+      function mount() {
+        container = document.createElement('div');
+        container.className = params.get('root') || 'ytp-caption-window-container';
+        container.style.cssText = 'position: absolute; inset: 0; pointer-events: none;';
+        player.append(container);
+        paint();
+      }
+      const late = Number(params.get('late') || 0);
+      if (late > 0) setTimeout(mount, late);
+      else mount();
+
+      window.navigateTo = (path) => {
+        history.pushState({}, '', path);
+        document.dispatchEvent(new CustomEvent('yt-navigate-finish', { bubbles: true }));
+      };
+
+      // 定时轮换（由测试在学习层就绪后启动，这样第一条被画出的字幕是确定的）
+      window.startCycle = (ms) => {
+        const script = [
+          ['Regular visitors linger in the labyrinth'],
+          ['Clatter and flicker of lanterns'],
+          ['A relentless vendor will dismantle the stall'],
+        ];
+        let index = 0;
+        setInterval(() => {
+          index = (index + 1) % script.length;
+          window.showCaption(script[index]);
+        }, ms);
+      };
+    </script>
+  </body>
+</html>

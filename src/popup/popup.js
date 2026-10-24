@@ -1,16 +1,21 @@
-// 工具栏菜单：本站点点词开关、打开静读、设置。
+// 工具栏菜单：本站点点词开关、YouTube 字幕学习层开关、打开静读、设置。
 //
 // 开启要在用户手势里同步调用 permissions.request；权限提示框弹出时 popup 可能被关掉，
 // 所以同一时刻先把「想开启的站点」告诉后台（lp-site-pending），后台在 permissions.onAdded
 // 里替我们完成开启。popup 活着拿到结果时再发一次 lp-site-enable，后台处理是幂等的。
+// 字幕学习层开关同理（lp-captions-pending / lp-captions-enable），它不分当前页面，固定申请 YouTube 的权限。
 
 const UNSUPPORTED = '此页面不支持点词翻译';
 const DENIED = '未获得本站点访问权限，点词翻译保持关闭';
+const YOUTUBE_PATTERN = 'https://www.youtube.com/*';
+const CAPTIONS_DENIED = '未获得 YouTube 访问权限，字幕学习层保持关闭';
 
 const toggle = document.getElementById('lookupToggle');
 const notice = document.getElementById('lookupNotice');
 const live = document.getElementById('lookupLive');
 const hostLabel = document.getElementById('siteHost');
+const captionsToggle = document.getElementById('captionsToggle');
+const captionsNotice = document.getElementById('captionsNotice');
 
 let tabId = null;
 let site = null; // {origin, host}
@@ -131,6 +136,62 @@ toggle.addEventListener('change', () => {
   else disable();
 });
 
+// ---------- YouTube 字幕学习层 ----------
+
+function showCaptionsNotice(text) {
+  captionsNotice.textContent = text || '';
+  captionsNotice.hidden = !text;
+  captionsNotice.dataset.tone = 'error';
+}
+
+async function refreshCaptions() {
+  const status = await send({ type: 'lp-captions-status' });
+  const ok = Boolean(status && !status.error);
+  captionsToggle.checked = ok && Boolean(status.enabled);
+  captionsToggle.disabled = !ok;
+}
+
+function enableCaptions() {
+  // 同样不能在 request 之前 await，否则丢掉用户手势
+  const granted = chrome.permissions.request({ origins: [YOUTUBE_PATTERN] });
+  send({ type: 'lp-captions-pending' });
+  captionsToggle.disabled = true;
+  showCaptionsNotice('');
+  granted
+    .catch(() => false)
+    .then(async (ok) => {
+      if (!ok) {
+        captionsToggle.checked = false;
+        showCaptionsNotice(CAPTIONS_DENIED);
+        await send({ type: 'lp-captions-pending-clear' });
+        return;
+      }
+      const result = await send({ type: 'lp-captions-enable' });
+      if (result && result.error) {
+        captionsToggle.checked = false;
+        showCaptionsNotice(result.error);
+      } else {
+        captionsToggle.checked = true;
+      }
+    })
+    .finally(() => {
+      captionsToggle.disabled = false;
+    });
+}
+
+async function disableCaptions() {
+  captionsToggle.disabled = true;
+  showCaptionsNotice('');
+  const result = await send({ type: 'lp-captions-disable' });
+  if (result && result.error) showCaptionsNotice(result.error);
+  await refreshCaptions();
+}
+
+captionsToggle.addEventListener('change', () => {
+  if (captionsToggle.checked) enableCaptions();
+  else disableCaptions();
+});
+
 document.getElementById('openReader').addEventListener('click', () => {
   if (tabId != null) send({ type: 'lp-open-reader', tabId });
   window.close();
@@ -140,6 +201,8 @@ document.getElementById('openOptions').addEventListener('click', () => {
   chrome.runtime.openOptionsPage();
   window.close();
 });
+
+refreshCaptions();
 
 resolveTabId()
   .then((id) => {

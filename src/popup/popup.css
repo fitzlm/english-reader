@@ -87,6 +87,10 @@ body {
   background: var(--card);
 }
 
+.row-captions {
+  margin-top: 10px;
+}
+
 .row-text {
   flex: 1;
   min-width: 0;

@@ -27,6 +27,18 @@
       <p class="notice" id="lookupNotice" role="status" hidden></p>
       <p class="live" id="lookupLive" role="status" hidden></p>
 
+      <section class="row row-captions" aria-labelledby="captionsLabel">
+        <div class="row-text">
+          <p class="row-title" id="captionsLabel">YouTube 字幕学习层</p>
+          <p class="row-hint" id="captionsHint">观看页字幕上方：学习中的词留空待点开，生词加中文小注</p>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="captionsToggle" aria-labelledby="captionsLabel" disabled />
+          <span class="switch-track" aria-hidden="true"></span>
+        </label>
+      </section>
+      <p class="notice" id="captionsNotice" role="status" hidden></p>
+
       <button type="button" class="primary" id="openReader">打开静读</button>
       <p class="primary-hint">先选中英文，也可右键或 <kbd>⌥⇧R</kbd></p>
 

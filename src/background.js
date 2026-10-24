@@ -7,7 +7,17 @@
 
 import { captureSelection } from './capture.js';
 import { mountReader, showHint } from './overlay.js';
-import { request } from './shared/api.js';
+import { fetchGlossary, request } from './shared/api.js';
+import {
+  CAPTIONS_MESSAGE_HANDLERS,
+  disableCaptions,
+  enableCaptions,
+  isCaptionsSender,
+  onCaptionsPermissionsAdded,
+  onCaptionsPermissionsRemoved,
+  reinjectCaptions,
+  syncCaptions,
+} from './shared/captions-control.js';
 import { readerUrl, storeDoc } from './shared/docs.js';
 import { createLearnerClient } from './shared/learner.js';
 import { handlePageLookupMessage, isAllowedSender, setAccountChangeObserver, setLookupObserver } from './shared/page-lookup.js';
@@ -51,19 +61,23 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
   // 核对点词站点的设置、权限与脚本注册，并给已开启站点里已打开的页面补注入：
   // 更新或重载后旧版内容脚本成了孤儿；重装、开发者模式加载时已打开的页面也没有脚本
   reinjectEnabledSites().catch(() => {});
+  reinjectCaptions().catch(() => {});
 });
 
 // 浏览器启动：注册脚本只管之后加载的页面，启动时已经恢复出来的标签页要补注入一次
 chrome.runtime.onStartup.addListener(() => {
   reinjectEnabledSites().catch(() => {});
+  reinjectCaptions().catch(() => {});
 });
 
 chrome.permissions.onAdded.addListener((permissions) => {
   onPermissionsAdded(permissions).catch(() => {});
+  onCaptionsPermissionsAdded(permissions).catch(() => {});
 });
 
 chrome.permissions.onRemoved.addListener((permissions) => {
   onPermissionsRemoved(permissions).catch(() => {});
+  onCaptionsPermissionsRemoved(permissions).catch(() => {});
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
@@ -88,16 +102,20 @@ setAccountChangeObserver(() => learner.clear());
 
 /** 单条消息最多查多少个词：客户端自己会按 200 个一批拆开，这里只给消息一个上限。 */
 const MAX_KNOWN_WORDS = 1000;
+/** 一条词库查询消息最多多少个词（字幕一行也就几十个词）。 */
+const MAX_GLOSSARY_WORDS = 200;
+const MAX_FORM_LENGTH = 40;
 const UNAUTHORIZED = Object.freeze({ error: '来源未授权', status: 403 });
 
 /**
- * 学习者模型与事件上报的来源闸门：本扩展自己的页面，或已开启点词站点顶层页面里本扩展的内容脚本
- * （后者直接用 isAllowedSender，点词自己的闸门不变）。处理函数的异常转成 {error}，保证一定有应答。
+ * 学习者模型、事件上报与词库查询的来源闸门：本扩展自己的页面；已开启点词站点顶层页面里本扩展的内容脚本
+ * （直接用 isAllowedSender，点词自己的闸门不变）；字幕层开着时 https://www.youtube.com 顶层页面里的内容脚本。
+ * 处理函数的异常转成 {error}，保证一定有应答。
  */
 function learnerMessage(handler) {
   return async (message, sender) => {
     const fromExtensionPage = isExtensionPageSender(sender, chrome.runtime.id, chrome.runtime.getURL(''));
-    if (!fromExtensionPage && !(await isAllowedSender(sender))) return UNAUTHORIZED;
+    if (!fromExtensionPage && !(await isAllowedSender(sender)) && !(await isCaptionsSender(sender))) return UNAUTHORIZED;
     try {
       return await handler(message || {});
     } catch (err) {
@@ -129,8 +147,20 @@ const MESSAGE_HANDLERS = {
     await tracker.flush();
     return { ok: true };
   }),
-  // popup 发来的站点开关与打开静读：只接受扩展自己的页面
-  ...Object.fromEntries(Object.entries(SITE_MESSAGE_HANDLERS).map(([type, fn]) => [type, extensionPageOnly(fn)])),
+  // {type:'lp-glossary', words:[...]} -> {entries, lemmas, missing}：词库释义（形状同 /api/words/glossary，只含所查的词）
+  'lp-glossary': learnerMessage(async ({ words }) => {
+    if (!Array.isArray(words)) return { error: '缺少 words', status: 400 };
+    if (words.length > MAX_GLOSSARY_WORDS) return { error: `一次最多查询 ${MAX_GLOSSARY_WORDS} 个词`, status: 413 };
+    const forms = [...new Set(words.filter((w) => typeof w === 'string').map((w) => w.trim().toLowerCase()))].filter(
+      (form) => form && form.length <= MAX_FORM_LENGTH,
+    );
+    if (!forms.length) return { entries: {}, lemmas: {}, missing: [] };
+    return fetchGlossary(forms);
+  }),
+  // popup 发来的站点开关、字幕层开关与打开静读：只接受扩展自己的页面
+  ...Object.fromEntries(
+    Object.entries({ ...SITE_MESSAGE_HANDLERS, ...CAPTIONS_MESSAGE_HANDLERS }).map(([type, fn]) => [type, extensionPageOnly(fn)]),
+  ),
   'lp-open-reader': extensionPageOnly(async (message) => {
     await openReader(await chrome.tabs.get(message.tabId), {});
     return { ok: true };
@@ -217,6 +247,14 @@ function hostOf(url) {
 
 // 端到端测试用：Playwright 没法点原生右键菜单，直接调同一个入口
 globalThis.__lpOpenReader = openReader;
+globalThis.__lpCaptions = {
+  enableCaptions,
+  disableCaptions,
+  syncCaptions,
+  reinjectCaptions,
+  onPermissionsAdded: onCaptionsPermissionsAdded,
+  onPermissionsRemoved: onCaptionsPermissionsRemoved,
+};
 globalThis.__lpSiteControl = {
   enableSite,
   disableSite,

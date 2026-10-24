@@ -15,6 +15,26 @@ export const LOADER = 'src/page/loader.js';
 export const PENDING_TTL = 2 * 60 * 1000;
 const PENDING_KEY = 'pageLookupPending';
 
+// 同一个站点权限可能还被点词以外的功能共用（YouTube 字幕层）：关点词时，只要还有功能在用就不交还权限。
+// 默认没有任何登记，行为与以前完全一致。
+const permissionKeepers = [];
+
+/** keeps(origin) 返回（或兑现为）true，表示这个站点的主机权限还有别的功能要用。 */
+export function addPermissionKeeper(keeps) {
+  if (typeof keeps === 'function') permissionKeepers.push(keeps);
+}
+
+async function keptByOthers(origin) {
+  for (const keeps of permissionKeepers) {
+    try {
+      if (await keeps(origin)) return true;
+    } catch (err) {
+      // 判断出错按「不需要」处理
+    }
+  }
+  return false;
+}
+
 // ---------- 纯函数（单元测试覆盖） ----------
 
 /** 规范的 http(s) origin 才算有效：new URL(origin).origin 必须原样等于它。 */
@@ -272,10 +292,12 @@ export function disableSite(origin) {
     await clearPending(origin);
     await syncNow();
     await stopOpenTabs(origin);
-    try {
-      await chrome.permissions.remove({ origins: [patternOf(origin)] });
-    } catch (err) {
-      // 必需权限（测试版 manifest）或已被移除：忽略
+    if (!(await keptByOthers(origin))) {
+      try {
+        await chrome.permissions.remove({ origins: [patternOf(origin)] });
+      } catch (err) {
+        // 必需权限（测试版 manifest）或已被移除：忽略
+      }
     }
     return { enabled: false };
   });

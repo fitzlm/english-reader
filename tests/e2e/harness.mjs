@@ -12,7 +12,8 @@ mkdirSync(SHOTS, { recursive: true });
 
 /**
  * 测试版插件：直接调用入口函数没有用户手势，拿不到 activeTab 授权，
- * 所以给测试副本的 manifest 补上本地服务器的主机权限。
+ * 所以给测试副本的 manifest 补上本地服务器的主机权限；字幕层的测试把 www.youtube.com 的请求
+ * 路由到本地夹具页，同样把它的主机权限设为必需（真实的授权提示框放人工验收）。
  */
 function buildTestExtension() {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'lp-reader-ext-'));
@@ -21,7 +22,7 @@ function buildTestExtension() {
   }
   const manifest = JSON.parse(readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
   // 真实网站验收（LIVE=1）要在任意站点注入；平时只放行本地测试服务器
-  manifest.host_permissions = [...manifest.host_permissions, process.env.LIVE ? '<all_urls>' : 'http://127.0.0.1/*'];
+  manifest.host_permissions = [...manifest.host_permissions, process.env.LIVE ? '<all_urls>' : 'http://127.0.0.1/*', 'https://www.youtube.com/*'];
   writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2));
   return dir;
 }
