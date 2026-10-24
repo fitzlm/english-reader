@@ -31,15 +31,26 @@ function identityOf(auth) {
   return 'guest';
 }
 
+// 服务器地址或登录身份变了（游客 token 续期不算）的订阅：后台用它让学习者模型缓存作废，
+// 触发条件与点词缓存清空完全一致（换查词源只影响点词，不通知）。只有一个订阅者，设成 null 取消。
+let accountObserver = null;
+
+export function setAccountChangeObserver(observer) {
+  accountObserver = typeof observer === 'function' ? observer : null;
+}
+
 if (globalThis.chrome?.storage?.onChanged) {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
-    if ('apiBase' in changes || 'lookupSource' in changes) {
-      clearPageLookupCache();
-      return;
-    }
-    if ('auth' in changes && identityOf(changes.auth.oldValue) !== identityOf(changes.auth.newValue)) {
-      clearPageLookupCache();
+    const accountChanged =
+      'apiBase' in changes || ('auth' in changes && identityOf(changes.auth.oldValue) !== identityOf(changes.auth.newValue));
+    if (accountChanged || 'lookupSource' in changes) clearPageLookupCache();
+    if (accountChanged && accountObserver) {
+      try {
+        accountObserver();
+      } catch (err) {
+        // 订阅者的问题不拖累查词
+      }
     }
   });
 }
@@ -47,6 +58,23 @@ if (globalThis.chrome?.storage?.onChanged) {
 /** 词形规整与阅读页 wordAtPoint 完全一致。 */
 function formOf(raw) {
   return normalizeForm(raw) || raw.toLowerCase().replace(/[’‘]/g, "'");
+}
+
+// 查词成功的订阅：后台用它把该词在学习者模型缓存里记为「学习中」（后端也据此置为学习中）。
+// 只有一个订阅者，设成 null 取消；它出任何错都不能影响查词本身。
+let lookupObserver = null;
+
+export function setLookupObserver(observer) {
+  lookupObserver = typeof observer === 'function' ? observer : null;
+}
+
+function notifyLookup(form) {
+  if (!lookupObserver) return;
+  try {
+    lookupObserver(form);
+  } catch (err) {
+    // 订阅者的问题不拖累查词
+  }
 }
 
 export function isLookupWord(raw) {
@@ -121,6 +149,7 @@ export async function lookupWord(raw, { record = true } = {}) {
     // 刷新新旧顺序：超出上限时先丢最久没用的
     cache.delete(form);
     cache.set(form, cached);
+    notifyLookup(form);
     return { word: raw, ...cached };
   }
   let pending = inflight.get(form);
@@ -140,6 +169,7 @@ export async function lookupWord(raw, { record = true } = {}) {
     inflight.set(form, pending);
   }
   const result = await pending;
+  notifyLookup(form);
   return { word: raw, ...result };
 }
 

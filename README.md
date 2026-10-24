@@ -92,21 +92,26 @@ Literata 正文、1.85 倍行距，默认正文宽度 800px，参考 A4 纸的�
 插件不读取、不上传浏览记录，也不发送你没有选中或点击的内容。读取原网页靠 `activeTab` 临时授权；固定网络权限只用于访问 LinguiPro 和微软翻译服务。
 只有你亲自开启点词翻译的网站才会获得常驻访问权限（Chrome 会先征得你同意），关闭后即交还；没有「读取所有网站」的权限。
 
+学习记录：为了按你的学习记录判断词的状态（已掌握、学习中、没学过），插件会把需要判断的词（只发词本身，不发所在网页的内容）和学习事件
+（例如哪个词被点开、某个学习层显示了几次）发送到 LinguiPro 服务器；事件在后台攒够一批再发，发送失败就丢弃，不影响使用。
+这些记录跟着你的 LinguiPro 身份走：不登录时插件用它自己的游客身份，和网页端的访客不是同一个人，学习记录互不相通；
+在设置页登录同一个 LinguiPro 账号后，插件和网页共享同一份学习记录。
+
 ## 开发
 
 ```
 src/
-  background.js      入口：右键菜单、快捷键、工具栏菜单 -> 抓选区 -> 盖阅读层；点词查询与站点开关的消息分发
+  background.js      入口：右键菜单、快捷键、工具栏菜单 -> 抓选区 -> 盖阅读层；点词查询、站点开关、学习者模型查询与事件上报的消息分发
   capture.js         注入网页：遍历实时 DOM，把选区抓成结构化块（不传 HTML）
   overlay.js         注入网页：closed shadow root 里的全屏 iframe，关闭后原样恢复
   reader/            阅读页（排版、生词标注、旁注排布、生词表、释义卡片）
   options/           设置页兼欢迎页
   popup/             工具栏菜单：本站点点词开关（含当前页面是否生效的确认）、打开静读、设置
   page/              原网页点词与选中翻译：内容脚本加载器、取词、选中翻译按钮、词卡与译文卡
-  shared/            后端客户端、设置存储、纯文本逻辑
+  shared/            后端客户端、学习者模型客户端（learner.js）、事件上报（track.js）、设置存储、纯文本逻辑
 fonts/  icons/
 tests/unit/          node --test 单测
-tests/e2e/           Playwright：加载真实插件跑端到端（selection.spec 选中翻译、page-lookup.spec 点词、site.spec 菜单与站点开关、live-selection.spec 真实网站冒烟）
+tests/e2e/           Playwright：加载真实插件跑端到端（selection.spec 选中翻译、page-lookup.spec 点词、site.spec 菜单与站点开关、learner.spec 学习者模型与事件上报、live-selection.spec 真实网站冒烟）
 ```
 
 ```bash

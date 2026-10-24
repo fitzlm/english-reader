@@ -7,8 +7,10 @@
 
 import { captureSelection } from './capture.js';
 import { mountReader, showHint } from './overlay.js';
+import { request } from './shared/api.js';
 import { readerUrl, storeDoc } from './shared/docs.js';
-import { handlePageLookupMessage } from './shared/page-lookup.js';
+import { createLearnerClient } from './shared/learner.js';
+import { handlePageLookupMessage, isAllowedSender, setAccountChangeObserver, setLookupObserver } from './shared/page-lookup.js';
 import { handlePageTranslateMessage } from './shared/page-translate.js';
 import { translateParagraph } from './shared/paragraph-translation.js';
 import {
@@ -16,11 +18,13 @@ import {
   disableSite,
   enableSite,
   extensionPageOnly,
+  isExtensionPageSender,
   onPermissionsAdded,
   onPermissionsRemoved,
   reinjectEnabledSites,
   syncRegistration,
 } from './shared/site-control.js';
+import { createTracker } from './shared/track.js';
 
 const MENU_ID = 'linguipro-open-reader';
 const OPTIONS_PAGE = chrome.runtime.getURL('src/options/options.html');
@@ -71,6 +75,37 @@ chrome.commands.onCommand.addListener((command, tab) => {
   if (command === 'open-reader' && tab) openReader(tab, {});
 });
 
+// 学习者模型客户端与事件上报：鉴权与网络请求都留在后台，页面里的脚本只发消息。
+// 缓存与队列随 service worker 存亡（和点词缓存一样），丢了只是多一次请求、少几条事件。
+const learner = createLearnerClient({ request });
+const tracker = createTracker({ request });
+
+// 点词成功后，这个词在学习者模型里就是「学习中」了（后端据查词记录置位）：本地缓存先改，不必等 10 分钟过期
+setLookupObserver((form) => learner.patch(form, 'learning'));
+
+// 换了服务器或登录身份：学习者模型缓存作废（触发点与点词缓存清空共用同一处，换查词源不算）
+setAccountChangeObserver(() => learner.clear());
+
+/** 单条消息最多查多少个词：客户端自己会按 200 个一批拆开，这里只给消息一个上限。 */
+const MAX_KNOWN_WORDS = 1000;
+const UNAUTHORIZED = Object.freeze({ error: '来源未授权', status: 403 });
+
+/**
+ * 学习者模型与事件上报的来源闸门：本扩展自己的页面，或已开启点词站点顶层页面里本扩展的内容脚本
+ * （后者直接用 isAllowedSender，点词自己的闸门不变）。处理函数的异常转成 {error}，保证一定有应答。
+ */
+function learnerMessage(handler) {
+  return async (message, sender) => {
+    const fromExtensionPage = isExtensionPageSender(sender, chrome.runtime.id, chrome.runtime.getURL(''));
+    if (!fromExtensionPage && !(await isAllowedSender(sender))) return UNAUTHORIZED;
+    try {
+      return await handler(message || {});
+    } catch (err) {
+      return { error: (err && err.message) || '操作失败' };
+    }
+  };
+}
+
 // 异步消息：处理函数返回 Promise，结果交给 sendResponse；返回 true 让通道保持到应答为止
 const MESSAGE_HANDLERS = {
   'lp-translate-paragraph': (message) =>
@@ -80,6 +115,20 @@ const MESSAGE_HANDLERS = {
     ),
   'lp-page-lookup': (message, sender) => handlePageLookupMessage(message, sender),
   'lp-page-translate': (message, sender) => handlePageTranslateMessage(message, sender),
+  // {type:'lp-learner-known', words:[...]} -> {states:{小写词形: 'known'|'learning'|'unknown'}}
+  'lp-learner-known': learnerMessage(async ({ words }) => {
+    if (!Array.isArray(words)) return { error: '缺少 words', status: 400 };
+    if (words.length > MAX_KNOWN_WORDS) return { error: `一次最多查询 ${MAX_KNOWN_WORDS} 个词`, status: 413 };
+    return { states: Object.fromEntries(await learner.states(words)) };
+  }),
+  // {type:'lp-track', event:'<后端已登记的事件类型>', payload:{...}} -> {ok}
+  // （消息自己的 type 已被消息名占用，事件类型放在 event 里；ok:false 表示事件类型或 payload 不合格，没入队）
+  'lp-track': learnerMessage(async ({ event, payload }) => ({ ok: tracker.track(event, payload) })),
+  // {type:'lp-track-flush'} -> {ok:true}：立刻把队列发完（发送失败的丢弃，不影响应答）
+  'lp-track-flush': learnerMessage(async () => {
+    await tracker.flush();
+    return { ok: true };
+  }),
   // popup 发来的站点开关与打开静读：只接受扩展自己的页面
   ...Object.fromEntries(Object.entries(SITE_MESSAGE_HANDLERS).map(([type, fn]) => [type, extensionPageOnly(fn)])),
   'lp-open-reader': extensionPageOnly(async (message) => {

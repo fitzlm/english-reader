@@ -105,7 +105,7 @@ store.auth = { token: 'guest-token-1', kind: 'guest' };
 store.pageLookupSites = ['https://example.com'];
 store.lookupSource = 'linguipro';
 
-const { lookupWord, handlePageLookupMessage, clearPageLookupCache } = await import('../../src/shared/page-lookup.js');
+const { lookupWord, handlePageLookupMessage, clearPageLookupCache, setAccountChangeObserver, setLookupObserver } = await import('../../src/shared/page-lookup.js');
 
 beforeEach(() => {
   clearPageLookupCache();
@@ -382,4 +382,89 @@ test('改了翻译源会清空缓存', async () => {
   storageSet({ lookupSource: 'youdao' });
   const again = await lookupWord('run');
   assert.equal(again.source, 'dict');
+});
+
+// ---------- 查词成功的订阅（后台用它把该词在学习者模型里记为学习中） ----------
+
+test('查词成功通知订阅者（词形，缓存命中也通知）；失败、闸门拒绝不通知', async () => {
+  const seen = [];
+  setLookupObserver((form) => seen.push(form));
+  try {
+    await lookupWord('Running');
+    await lookupWord('running'); // 缓存命中
+    assert.deepEqual(seen, ['running', 'running']);
+
+    await handlePageLookupMessage({ type: 'lp-page-lookup', word: 'run' }, SENDER);
+    assert.deepEqual(seen, ['running', 'running', 'run']);
+
+    seen.length = 0;
+    await handlePageLookupMessage({ type: 'lp-page-lookup', word: 'ran' }, { ...SENDER, frameId: 3 }); // 闸门拒绝
+    await assert.rejects(lookupWord('qwrtplk')); // 没有找到释义
+    await assert.rejects(lookupWord('two words')); // 格式不对
+    failNetwork = true;
+    clearPageLookupCache();
+    await assert.rejects(lookupWord('run')); // 网络失败
+    assert.deepEqual(seen, []);
+  } finally {
+    setLookupObserver(null);
+  }
+});
+
+test('订阅者抛错不影响查词；record:false 也通知；取消订阅后不再通知', async () => {
+  const seen = [];
+  setLookupObserver((form) => {
+    seen.push(form);
+    throw new Error('boom');
+  });
+  try {
+    const result = await lookupWord('run', { record: false });
+    assert.equal(result.source, 'dict');
+    assert.deepEqual(seen, ['run']);
+  } finally {
+    setLookupObserver(null);
+  }
+  await lookupWord('run');
+  setLookupObserver('not a function');
+  await lookupWord('run');
+  assert.deepEqual(seen, ['run']);
+});
+
+test('服务器或登录身份变了通知订阅者；换查词源、游客 token 续期、同一账号换 token 不通知', () => {
+  let notified = 0;
+  setAccountChangeObserver(() => {
+    notified += 1;
+  });
+  try {
+    storageSet({ lookupSource: 'youdao' });
+    storageSet({ auth: { token: 'guest-token-2', kind: 'guest' } });
+    assert.equal(notified, 0);
+
+    storageSet({ apiBase: 'https://other.test/english' });
+    assert.equal(notified, 1);
+    storageSet({ auth: { token: 'user-token', kind: 'user', user: { identifier: 'a@example.com' } } });
+    assert.equal(notified, 2);
+    storageSet({ auth: { token: 'user-token-2', kind: 'user', user: { identifier: 'a@example.com' } } });
+    assert.equal(notified, 2);
+    storageSet({ auth: { token: 'user-token-3', kind: 'user', user: { identifier: 'b@example.com' } } });
+    assert.equal(notified, 3);
+    storageSet({ auth: null }); // 退出登录
+    assert.equal(notified, 4);
+  } finally {
+    setAccountChangeObserver(null);
+  }
+});
+
+test('账号订阅者抛错不影响点词缓存清空', async () => {
+  setAccountChangeObserver(() => {
+    throw new Error('boom');
+  });
+  try {
+    await lookupWord('run');
+    await chrome.storage.local.set({ apiBase: 'https://other.test/english' });
+    store.apiBase = 'https://example.test/english'; // 假后端只认这个前缀；清空已由上一行触发
+    await lookupWord('run');
+    assert.equal(glossaryCalls(), 2);
+  } finally {
+    setAccountChangeObserver(null);
+  }
 });

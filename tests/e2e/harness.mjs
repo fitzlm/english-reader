@@ -134,9 +134,30 @@ export function mockGlossary(words) {
   return { entries, lemmas, missing };
 }
 
+/**
+ * 学习者模型 mock（GET /api/learner/known）：LEARNING 里的词是学习中；
+ * 其余按词频排名与阈值判断：排名 ≤ 阈值算已知，更生僻或词库没有的算未知。
+ * 例：benefit(1605) 已知，linger 学习中，clatter(12040)、dismantle(9800)、ephemeral(16500) 未知。
+ */
+export const LEARNER_THRESHOLD = 2000;
+export const LEARNING = new Set(['linger', 'flicker']);
+
+export function mockLearnerKnown(words) {
+  const { entries } = mockGlossary(words);
+  const states = {};
+  for (const word of words) {
+    const form = word.toLowerCase();
+    const rank = entries[form] ? entries[form].rank : null;
+    if (LEARNING.has(form)) states[word] = 'learning';
+    else states[word] = typeof rank === 'number' && rank <= LEARNER_THRESHOLD ? 'known' : 'unknown';
+  }
+  return { states, threshold: LEARNER_THRESHOLD };
+}
+
 export async function installApiMock(context, { failGlossary = false, contextStatus = 200 } = {}) {
   const state = { failGlossary };
-  const calls = { glossary: 0, translate: 0, guest: 0, context: 0, contextItems: [], wordUpdates: [] };
+  // known：每次 /api/learner/known 请求的词列表；events：每次 POST /api/events 的请求体
+  const calls = { glossary: 0, translate: 0, guest: 0, context: 0, contextItems: [], wordUpdates: [], known: [], events: [] };
   await context.route('https://json-view.org/english/api/**', async (route) => {
     const url = new URL(route.request().url());
     const json = (status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -175,6 +196,19 @@ export async function installApiMock(context, { failGlossary = false, contextSta
         else if (item.key.startsWith('zq')) glosses[item.key] = { pos: 'n.', zh: `语境${item.key.slice(2)}` };
       }
       return json(200, { glosses });
+    }
+    if (url.pathname.endsWith('/api/learner/known')) {
+      const words = (url.searchParams.get('words') || '').split(',').filter(Boolean);
+      calls.known.push(words);
+      if (words.length > 200) return json(413, { detail: 'at most 200 words' });
+      return json(200, mockLearnerKnown(words));
+    }
+    if (url.pathname.endsWith('/api/events') && route.request().method() === 'POST') {
+      const body = route.request().postDataJSON();
+      calls.events.push(body);
+      if (!body || !Array.isArray(body.events)) return json(422, { detail: 'bad body' });
+      if (body.events.length > 50) return json(413, { detail: 'at most 50 events per request' });
+      return json(202, { accepted: body.events.length, rejected: 0 });
     }
     return json(404, { detail: 'not mocked' });
   });
