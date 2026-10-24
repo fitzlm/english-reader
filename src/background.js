@@ -1,5 +1,6 @@
 // 后台：三个入口（右键菜单、快捷键、工具栏菜单里的「打开静读」）都走 openReader。
-// 工具栏图标打开 popup（src/popup），里面还有本站点点词开关，由 shared/site-control.js 处理。
+// 工具栏图标打开 popup（src/popup），里面还有本站点点词开关（shared/site-control.js）、
+// 本站点网页浸入开关（shared/immersion-control.js）与 YouTube 字幕学习层开关（shared/captions-control.js）。
 //
 // 流程：在选区所在的框架里抓取选区 -> 存进 storage.session -> 在顶层框架盖上阅读层。
 // 页面不允许注入（Chrome 内置页、PDF 查看器、应用商店）时，退回右键菜单给的纯文本，
@@ -19,6 +20,16 @@ import {
   syncCaptions,
 } from './shared/captions-control.js';
 import { readerUrl, storeDoc } from './shared/docs.js';
+import {
+  IMMERSION_MESSAGE_HANDLERS,
+  disableImmersion,
+  enableImmersion,
+  isImmersionSender,
+  onImmersionPermissionsAdded,
+  onImmersionPermissionsRemoved,
+  reinjectImmersion,
+  syncImmersion,
+} from './shared/immersion-control.js';
 import { createLearnerClient } from './shared/learner.js';
 import { handlePageLookupMessage, isAllowedSender, setAccountChangeObserver, setLookupObserver } from './shared/page-lookup.js';
 import { handlePageTranslateMessage } from './shared/page-translate.js';
@@ -62,22 +73,26 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
   // 更新或重载后旧版内容脚本成了孤儿；重装、开发者模式加载时已打开的页面也没有脚本
   reinjectEnabledSites().catch(() => {});
   reinjectCaptions().catch(() => {});
+  reinjectImmersion().catch(() => {});
 });
 
 // 浏览器启动：注册脚本只管之后加载的页面，启动时已经恢复出来的标签页要补注入一次
 chrome.runtime.onStartup.addListener(() => {
   reinjectEnabledSites().catch(() => {});
   reinjectCaptions().catch(() => {});
+  reinjectImmersion().catch(() => {});
 });
 
 chrome.permissions.onAdded.addListener((permissions) => {
   onPermissionsAdded(permissions).catch(() => {});
   onCaptionsPermissionsAdded(permissions).catch(() => {});
+  onImmersionPermissionsAdded(permissions).catch(() => {});
 });
 
 chrome.permissions.onRemoved.addListener((permissions) => {
   onPermissionsRemoved(permissions).catch(() => {});
   onCaptionsPermissionsRemoved(permissions).catch(() => {});
+  onImmersionPermissionsRemoved(permissions).catch(() => {});
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
@@ -107,21 +122,30 @@ const MAX_GLOSSARY_WORDS = 200;
 const MAX_FORM_LENGTH = 40;
 const UNAUTHORIZED = Object.freeze({ error: '来源未授权', status: 403 });
 
+/** 默认放行的内容脚本：已开启点词站点顶层页面里的（直接用 isAllowedSender，点词自己的闸门不变）；字幕层开着时 YouTube 顶层页面里的。 */
+const LEARNER_SENDERS = [isAllowedSender, isCaptionsSender];
+/** 事件上报还放行已开启网页浸入的站点（浸入要报 immersion.show / immersion.hover），其余接口不放。 */
+const TRACK_SENDERS = [...LEARNER_SENDERS, isImmersionSender];
+
 /**
- * 学习者模型、事件上报与词库查询的来源闸门：本扩展自己的页面；已开启点词站点顶层页面里本扩展的内容脚本
- * （直接用 isAllowedSender，点词自己的闸门不变）；字幕层开着时 https://www.youtube.com 顶层页面里的内容脚本。
+ * 学习者模型、事件上报与词库查询的来源闸门：本扩展自己的页面，或 senders 里任何一个放行的内容脚本。
  * 处理函数的异常转成 {error}，保证一定有应答。
  */
-function learnerMessage(handler) {
+function learnerMessage(handler, senders = LEARNER_SENDERS) {
   return async (message, sender) => {
     const fromExtensionPage = isExtensionPageSender(sender, chrome.runtime.id, chrome.runtime.getURL(''));
-    if (!fromExtensionPage && !(await isAllowedSender(sender)) && !(await isCaptionsSender(sender))) return UNAUTHORIZED;
+    if (!fromExtensionPage && !(await anySender(senders, sender))) return UNAUTHORIZED;
     try {
       return await handler(message || {});
     } catch (err) {
       return { error: (err && err.message) || '操作失败' };
     }
   };
+}
+
+async function anySender(senders, sender) {
+  for (const allowed of senders) if (await allowed(sender)) return true;
+  return false;
 }
 
 // 异步消息：处理函数返回 Promise，结果交给 sendResponse；返回 true 让通道保持到应答为止
@@ -141,12 +165,12 @@ const MESSAGE_HANDLERS = {
   }),
   // {type:'lp-track', event:'<后端已登记的事件类型>', payload:{...}} -> {ok}
   // （消息自己的 type 已被消息名占用，事件类型放在 event 里；ok:false 表示事件类型或 payload 不合格，没入队）
-  'lp-track': learnerMessage(async ({ event, payload }) => ({ ok: tracker.track(event, payload) })),
+  'lp-track': learnerMessage(async ({ event, payload }) => ({ ok: tracker.track(event, payload) }), TRACK_SENDERS),
   // {type:'lp-track-flush'} -> {ok:true}：立刻把队列发完（发送失败的丢弃，不影响应答）
   'lp-track-flush': learnerMessage(async () => {
     await tracker.flush();
     return { ok: true };
-  }),
+  }, TRACK_SENDERS),
   // {type:'lp-glossary', words:[...]} -> {entries, lemmas, missing}：词库释义（形状同 /api/words/glossary，只含所查的词）
   'lp-glossary': learnerMessage(async ({ words }) => {
     if (!Array.isArray(words)) return { error: '缺少 words', status: 400 };
@@ -157,9 +181,15 @@ const MESSAGE_HANDLERS = {
     if (!forms.length) return { entries: {}, lemmas: {}, missing: [] };
     return fetchGlossary(forms);
   }),
-  // popup 发来的站点开关、字幕层开关与打开静读：只接受扩展自己的页面
+  // {type:'lp-immersion-words'} -> {items:[{word, gloss}]}：网页浸入的词表（正在学的词，≤ 50 个，释义已是第一条中文）。
+  // 只放行已开启浸入的站点里的内容脚本（和扩展自己的页面），点词、字幕层的来源不能取这张表
+  'lp-immersion-words': learnerMessage(async () => ({ items: await learner.immersion() }), [isImmersionSender]),
+  // popup 发来的站点开关、字幕层开关、浸入开关与打开静读：只接受扩展自己的页面
   ...Object.fromEntries(
-    Object.entries({ ...SITE_MESSAGE_HANDLERS, ...CAPTIONS_MESSAGE_HANDLERS }).map(([type, fn]) => [type, extensionPageOnly(fn)]),
+    Object.entries({ ...SITE_MESSAGE_HANDLERS, ...CAPTIONS_MESSAGE_HANDLERS, ...IMMERSION_MESSAGE_HANDLERS }).map(([type, fn]) => [
+      type,
+      extensionPageOnly(fn),
+    ]),
   ),
   'lp-open-reader': extensionPageOnly(async (message) => {
     await openReader(await chrome.tabs.get(message.tabId), {});
@@ -254,6 +284,14 @@ globalThis.__lpCaptions = {
   reinjectCaptions,
   onPermissionsAdded: onCaptionsPermissionsAdded,
   onPermissionsRemoved: onCaptionsPermissionsRemoved,
+};
+globalThis.__lpImmersion = {
+  enableImmersion,
+  disableImmersion,
+  syncImmersion,
+  reinjectImmersion,
+  onPermissionsAdded: onImmersionPermissionsAdded,
+  onPermissionsRemoved: onImmersionPermissionsRemoved,
 };
 globalThis.__lpSiteControl = {
   enableSite,

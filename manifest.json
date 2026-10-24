@@ -51,6 +51,8 @@
         "src/page/ui.js",
         "src/page/captions.js",
         "src/page/captions-core.js",
+        "src/page/immersion.js",
+        "src/page/immersion-core.js",
         "src/shared/selection.js",
         "src/shared/text.js"
       ],

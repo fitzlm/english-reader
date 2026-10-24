@@ -5,8 +5,8 @@
 //   是可选权限，由 popup 在用户手势里请求；
 // - 开启：注册内容脚本 lp-captions（document_idle，只在 www.youtube.com 顶层框架），
 //   并给已打开的 YouTube 标签页补注入 loader；关闭：注销，再尽量交还主机权限；
-// - 权限与点词共用：点词也开在 www.youtube.com 时，关字幕层不交还权限；反过来关点词时，
-//   通过 site-control 的 addPermissionKeeper 保住字幕层还要用的权限；
+// - 权限与点词、网页浸入共用：点词或浸入也开在 www.youtube.com 时，关字幕层不交还权限；反过来关点词时，
+//   通过 site-control 的 addPermissionKeeper 保住字幕层还要用的权限（关浸入时由 immersion-control 自己判断字幕层还开不开）；
 // - popup 可能被权限提示框关掉：请求权限前先把「想开启」的意图记进 storage.session，
 //   后台在 permissions.onAdded 里据此完成开启（没有这份意图不自动开启）；
 // - 权限被撤销：关掉开关、注销脚本（页面里的脚本监听 captionsEnabled 自行退场）。
@@ -54,10 +54,10 @@ async function permissionState() {
   }
 }
 
-/** 点词是否也开在 www.youtube.com（同一个主机权限，关字幕层时不能交还）。 */
-async function lookupUsesYoutube() {
-  const { pageLookupSites } = await chrome.storage.local.get('pageLookupSites');
-  return Array.isArray(pageLookupSites) && pageLookupSites.includes(YOUTUBE_ORIGIN);
+/** 点词或网页浸入是否也开在 www.youtube.com（同一个主机权限，关字幕层时不能交还）。 */
+async function othersUseYoutube() {
+  const [lookup, immersion] = await Promise.all(['pageLookupSites', 'immersionSites'].map((key) => chrome.storage.local.get(key)));
+  return [lookup.pageLookupSites, immersion.immersionSites].some((sites) => Array.isArray(sites) && sites.includes(YOUTUBE_ORIGIN));
 }
 
 // 关点词时，字幕层还开着就别交还 www.youtube.com 的权限
@@ -155,7 +155,7 @@ export function disableCaptions() {
     await chrome.storage.local.set({ [ENABLED_KEY]: false });
     await clearPending();
     await syncNow();
-    if (!(await lookupUsesYoutube())) {
+    if (!(await othersUseYoutube())) {
       try {
         await chrome.permissions.remove({ origins: [YOUTUBE_PATTERN] });
       } catch (err) {

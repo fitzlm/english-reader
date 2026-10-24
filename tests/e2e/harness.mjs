@@ -155,10 +155,26 @@ export function mockLearnerKnown(words) {
   return { states, threshold: LEARNER_THRESHOLD };
 }
 
-export async function installApiMock(context, { failGlossary = false, contextStatus = 200 } = {}) {
-  const state = { failGlossary };
-  // known：每次 /api/learner/known 请求的词列表；events：每次 POST /api/events 的请求体
-  const calls = { glossary: 0, translate: 0, guest: 0, context: 0, contextItems: [], wordUpdates: [], known: [], events: [] };
+/**
+ * 网页浸入词表 mock（GET /api/learner/immersion）：后端只给 learning 状态的词、释义已是第一条中文。
+ * wok（释义只有 1 个汉字）和 duct（释义没有汉字）是后端偶尔会给的短释义：页面不该用。
+ */
+export const IMMERSION_ITEMS = [
+  { word: 'linger', gloss: '逗留' },
+  { word: 'labyrinth', gloss: '迷宫' },
+  { word: 'lantern', gloss: '灯笼' },
+  { word: 'ephemeral', gloss: '短暂的' },
+  { word: 'art', gloss: '艺术' },
+  { word: 'flicker', gloss: '闪烁' },
+  { word: 'wok', gloss: '锅' },
+  { word: 'duct', gloss: 'a pipe' },
+];
+
+export async function installApiMock(context, { failGlossary = false, contextStatus = 200, immersionItems = IMMERSION_ITEMS, immersionStatus = 200 } = {}) {
+  // immersionItems / immersionStatus 可以在测试里随时改，下一次请求生效
+  const state = { failGlossary, immersionItems, immersionStatus };
+  // known：每次 /api/learner/known 请求的词列表；events：每次 POST /api/events 的请求体；immersion：/api/learner/immersion 请求次数
+  const calls = { glossary: 0, translate: 0, guest: 0, context: 0, immersion: 0, contextItems: [], wordUpdates: [], known: [], events: [] };
   await context.route('https://json-view.org/english/api/**', async (route) => {
     const url = new URL(route.request().url());
     const json = (status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -203,6 +219,11 @@ export async function installApiMock(context, { failGlossary = false, contextSta
       calls.known.push(words);
       if (words.length > 200) return json(413, { detail: 'at most 200 words' });
       return json(200, mockLearnerKnown(words));
+    }
+    if (url.pathname.endsWith('/api/learner/immersion')) {
+      calls.immersion += 1;
+      if (state.immersionStatus !== 200) return json(state.immersionStatus, { detail: 'not available' });
+      return json(200, { items: state.immersionItems });
     }
     if (url.pathname.endsWith('/api/events') && route.request().method() === 'POST') {
       const body = route.request().postDataJSON();

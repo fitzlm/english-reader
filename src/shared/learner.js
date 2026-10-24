@@ -9,11 +9,17 @@
 // - 某批 413：对半拆成两批各重试一次，仍失败的那一半按失败处理。
 // - 失败不抛错：该词按 unknown 返回，且不写缓存，下次再试。
 // - 缓存随 service worker 存亡（和 page-lookup 一样）；换了服务器或登录身份时由调用方 clear()。
+//
+// 网页浸入的词表：GET /api/learner/immersion -> {items: [{word, gloss}]}（learning 状态的词，≤ 50 个，
+// gloss 已是第一条中文释义；非英语学习者 422；访客可用）。immersion() 整张表缓存 10 分钟，同样不抛错：
+// 失败返回空表且不写缓存，下次再试。
 
 export const KNOWN_CHUNK = 200;
 export const KNOWN_CONCURRENCY = 2;
 export const KNOWN_TTL_MS = 10 * 60 * 1000;
 export const KNOWN_MAX_CACHE = 5000;
+/** 浸入词表最多留多少项（后端也只给 ≤ 50 个）。 */
+export const IMMERSION_MAX_ITEMS = 50;
 /** 和 text.js 的 normalizeForm 一致：词形最长 40 个字符。 */
 const MAX_FORM_LENGTH = 40;
 const STATES = new Set(['known', 'learning', 'unknown']);
@@ -29,6 +35,23 @@ function formOf(word) {
     return null; // 孤立的代理项字符
   }
   return form;
+}
+
+/** 后端的浸入词表 -> [{word, gloss}]：只留两个字段都是非空字符串的项，词转小写，重复的词只留第一个，最多 50 项。 */
+function immersionItems(data) {
+  const raw = data && Array.isArray(data.items) ? data.items : [];
+  const seen = new Set();
+  const out = [];
+  for (const item of raw) {
+    if (out.length >= IMMERSION_MAX_ITEMS) break;
+    if (!item || typeof item.word !== 'string' || typeof item.gloss !== 'string') continue;
+    const word = item.word.trim().toLowerCase();
+    const gloss = item.gloss.trim();
+    if (!word || !gloss || seen.has(word)) continue;
+    seen.add(word);
+    out.push({ word, gloss });
+  }
+  return out;
 }
 
 /** 先进先出的并发闸：同时最多 max 个任务在跑。task 必须返回 Promise。 */
@@ -66,6 +89,8 @@ export function createLearnerClient({ request, now = Date.now } = {}) {
   const limit = createLimiter(KNOWN_CONCURRENCY);
   let generation = 0; // clear() 之后，旧请求的结果不再写回缓存
   let patchSeq = 0;
+  let immersionCache = null; // {items, at}
+  let immersionInflight = null; // 在途的那一次请求（Promise<items>）
 
   function store(form, state, at, patched = 0) {
     cache.delete(form); // 重新插入，最久没写的排在最前面，超出上限时先丢
@@ -170,12 +195,43 @@ export function createLearnerClient({ request, now = Date.now } = {}) {
     return true;
   }
 
+  /**
+   * 浸入词表 -> [{word, gloss}]（10 分钟缓存，在途时共用同一次请求）。永不 reject：
+   * 请求失败（含 422 非英语学习者）返回 []，不写缓存。返回的是副本，调用方随便改。
+   */
+  async function immersion() {
+    const t = now();
+    if (immersionCache) {
+      const age = t - immersionCache.at;
+      if (age >= 0 && age < KNOWN_TTL_MS) return immersionCache.items.map((item) => ({ ...item }));
+      immersionCache = null;
+    }
+    if (!immersionInflight) {
+      const gen = generation;
+      const run = (async () => {
+        try {
+          const items = immersionItems(await request('/api/learner/immersion'));
+          if (gen === generation) immersionCache = { items, at: now() };
+          return items;
+        } catch (err) {
+          return [];
+        }
+      })().finally(() => {
+        if (immersionInflight === run) immersionInflight = null;
+      });
+      immersionInflight = run;
+    }
+    return (await immersionInflight).map((item) => ({ ...item }));
+  }
+
   /** 清空缓存与在途记录；在途请求完成后也不再写回缓存。 */
   function clear() {
     generation += 1;
     cache.clear();
     inflight.clear();
+    immersionCache = null;
+    immersionInflight = null;
   }
 
-  return { states, patch, clear };
+  return { states, patch, clear, immersion };
 }

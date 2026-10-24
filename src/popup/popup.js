@@ -1,14 +1,16 @@
-// 工具栏菜单：本站点点词开关、YouTube 字幕学习层开关、打开静读、设置。
+// 工具栏菜单：本站点点词开关、本站点浸入开关与「还原本页」、YouTube 字幕学习层开关、打开静读、设置。
 //
 // 开启要在用户手势里同步调用 permissions.request；权限提示框弹出时 popup 可能被关掉，
 // 所以同一时刻先把「想开启的站点」告诉后台（lp-site-pending），后台在 permissions.onAdded
 // 里替我们完成开启。popup 活着拿到结果时再发一次 lp-site-enable，后台处理是幂等的。
 // 字幕学习层开关同理（lp-captions-pending / lp-captions-enable），它不分当前页面，固定申请 YouTube 的权限。
+// 网页浸入开关与点词开关一模一样地按当前站点开（lp-immersion-pending / lp-immersion-enable），两者共用同一个站点权限。
 
 const UNSUPPORTED = '此页面不支持点词翻译';
 const DENIED = '未获得本站点访问权限，点词翻译保持关闭';
 const YOUTUBE_PATTERN = 'https://www.youtube.com/*';
 const CAPTIONS_DENIED = '未获得 YouTube 访问权限，字幕学习层保持关闭';
+const IMMERSION_DENIED = '未获得本站点访问权限，网页浸入保持关闭';
 
 const toggle = document.getElementById('lookupToggle');
 const notice = document.getElementById('lookupNotice');
@@ -16,10 +18,14 @@ const live = document.getElementById('lookupLive');
 const hostLabel = document.getElementById('siteHost');
 const captionsToggle = document.getElementById('captionsToggle');
 const captionsNotice = document.getElementById('captionsNotice');
+const immersionToggle = document.getElementById('immersionToggle');
+const immersionNotice = document.getElementById('immersionNotice');
+const immersionRestore = document.getElementById('immersionRestore');
 
 let tabId = null;
 let site = null; // {origin, host}
 let liveRun = 0; // 「当前页面是否生效」检查的序号：只认最近一次的结果
+let immersionOrigin = ''; // 当前页面可开浸入时是它的 origin，否则是空串
 
 /** tone: 'info' 说明性（不支持的页面），'error' 操作失败。 */
 function showNotice(text, tone = 'error') {
@@ -136,6 +142,77 @@ toggle.addEventListener('change', () => {
   else disable();
 });
 
+// ---------- 网页浸入 ----------
+
+/** tone: 'info' 说明性（还原结果），'error' 操作失败。 */
+function showImmersionNotice(text, tone = 'error') {
+  immersionNotice.textContent = text || '';
+  immersionNotice.hidden = !text;
+  immersionNotice.dataset.tone = tone;
+}
+
+async function refreshImmersion() {
+  const status = tabId == null ? null : await send({ type: 'lp-immersion-status', tabId });
+  const supported = Boolean(status && !status.error && status.supported);
+  immersionOrigin = supported ? status.origin : '';
+  immersionToggle.checked = supported && Boolean(status.enabled);
+  immersionToggle.disabled = !supported;
+  immersionRestore.disabled = !supported; // 只有 http(s) 网页才有可还原的内容
+}
+
+function enableImmersion() {
+  const origin = immersionOrigin;
+  // 同样不能在 request 之前 await，否则丢掉用户手势
+  const granted = chrome.permissions.request({ origins: [`${origin}/*`] });
+  send({ type: 'lp-immersion-pending', origin, tabId });
+  immersionToggle.disabled = true;
+  showImmersionNotice('');
+  granted
+    .catch(() => false)
+    .then(async (ok) => {
+      if (!ok) {
+        immersionToggle.checked = false;
+        showImmersionNotice(IMMERSION_DENIED);
+        await send({ type: 'lp-immersion-pending-clear', origin });
+        return;
+      }
+      const result = await send({ type: 'lp-immersion-enable', origin, tabId });
+      if (result && result.error) {
+        immersionToggle.checked = false;
+        showImmersionNotice(result.error);
+      } else {
+        immersionToggle.checked = true;
+      }
+    })
+    .finally(() => {
+      immersionToggle.disabled = false;
+    });
+}
+
+async function disableImmersion() {
+  immersionToggle.disabled = true;
+  showImmersionNotice('');
+  const result = await send({ type: 'lp-immersion-disable', origin: immersionOrigin });
+  if (result && result.error) showImmersionNotice(result.error);
+  await refreshImmersion();
+}
+
+immersionToggle.addEventListener('change', () => {
+  if (!immersionOrigin) return;
+  if (immersionToggle.checked) enableImmersion();
+  else disableImmersion();
+});
+
+immersionRestore.addEventListener('click', async () => {
+  if (tabId == null || !immersionOrigin) return;
+  immersionRestore.disabled = true;
+  const result = await send({ type: 'lp-immersion-restore', tabId });
+  immersionRestore.disabled = !immersionOrigin;
+  if (result && result.error) showImmersionNotice(result.error);
+  else if (result && result.restored > 0) showImmersionNotice(`已还原 ${result.restored} 处，刷新页面后会再次浸入`, 'info');
+  else showImmersionNotice('本页没有需要还原的浸入内容', 'info');
+});
+
 // ---------- YouTube 字幕学习层 ----------
 
 function showCaptionsNotice(text) {
@@ -207,6 +284,10 @@ refreshCaptions();
 resolveTabId()
   .then((id) => {
     tabId = id;
+    refreshImmersion();
     return refresh();
   })
-  .catch(() => refresh());
+  .catch(() => {
+    refreshImmersion();
+    return refresh();
+  });

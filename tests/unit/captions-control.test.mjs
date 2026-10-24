@@ -184,6 +184,21 @@ test('关闭：点词也开在 www.youtube.com 时不交还权限（两个功能
   assert.deepEqual(removed, []);
 });
 
+test('关闭：网页浸入也开在 www.youtube.com 时不交还权限（浸入的设置不动）；浸入不在 YouTube 时照常交还', async () => {
+  local.immersionSites = [YT, 'https://other.example.com'];
+  await captions.enableCaptions();
+  await captions.disableCaptions();
+  assert.equal(local.captionsEnabled, false);
+  assert.deepEqual(removed, []);
+  assert.deepEqual(local.immersionSites, [YT, 'https://other.example.com']);
+
+  // 对照：浸入只开在别的站点，字幕层关闭照常交还 YouTube 的权限
+  local.immersionSites = ['https://other.example.com'];
+  await captions.enableCaptions();
+  await captions.disableCaptions();
+  assert.deepEqual(removed, [YT_PATTERN]);
+});
+
 test('关点词：字幕层还开着就保住 www.youtube.com 的权限；字幕层关了再关点词才交还', async () => {
   local.pageLookupSites = [YT, 'https://other.example.com'];
   permission = true;

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Immersion Fixture</title>
+  <!--
+    网页浸入的夹具页。e2e 的学习中词表（harness 的 IMMERSION_ITEMS）：linger 逗留、labyrinth 迷宫、lantern 灯笼、
+    ephemeral 短暂的、art 艺术、flicker 闪烁；wok（释义只有 1 个汉字）和 duct（释义没有汉字）不该被用。
+    按文档顺序，#skips 之外应当出现 6 处提示：Linger / linger / Linger / art’s / flicker / ephemeral。
+    URL 参数：?many=N 末尾追加 N 个各含一个 lantern 的段落（测每页 20 处的上限）；
+              ?late=毫秒 先只显示「Loading」，隔这么久才放出全部内容（测单页应用晚渲染）；?dark 深色页面（测小注配色）。
+  -->
+  <style>
+    body { max-width: 860px; margin: 32px auto; font: 20px/1.7 Georgia, serif; color: #222; background: #fff; }
+    p { margin: 0 0 12px; }
+    h1 { margin: 0 0 14px; font-size: 30px; }
+    #skips > * { display: block; margin: 0 0 8px; }
+    .dark body { background: #14130f; color: #e8e2d6; }
+  </style>
+  <script>
+    // 测试用：数一数点词、浸入各派发过几次接管事件（DOM 事件可跨隔离环境被网页看到）
+    window.lookupTakeovers = 0;
+    window.immersionTakeovers = 0;
+    document.addEventListener('lp-page-lookup:takeover', () => { window.lookupTakeovers += 1; });
+    document.addEventListener('lp-immersion:takeover', () => { window.immersionTakeovers += 1; });
+  </script>
+</head>
+<body>
+  <h1 id="title">Linger over the labyrinth</h1>
+  <p id="first">Regular visitors linger in the quiet lanes; the lantern is lit at dusk.</p>
+  <p id="both">Linger a while, the flicker will fade. Linger again.</p>
+  <p id="boundary">A cartoon about the start of a party, smart and artful.</p>
+  <p id="apos">The art’s value is ephemeral.</p>
+  <p id="short">Wok and duct in a kitchen.</p>
+  <p id="frag">An <b>art</b>icle about <i>lan</i>tern.</p>
+  <p id="inlinelink">Read the <a href="#x">lantern guide</a> and the flicker.</p>
+  <p id="click">The ephemeral stalls were dismantled before dawn.</p>
+  <p id="hidden" style="display: none">linger hidden</p>
+  <p id="invisible" style="visibility: hidden">labyrinth invisible</p>
+
+  <div id="skips">
+    <p>Call <code id="code">linger()</code> with <kbd>lantern</kbd> held down.</p>
+    <pre id="pre">labyrinth of lanterns</pre>
+    <textarea id="area">linger in the textarea</textarea>
+    <input id="field" value="linger">
+    <div id="editable" contenteditable="true">The flicker of a lantern</div>
+    <button id="btn" type="button">lantern button</button>
+    <a id="link" href="#x">labyrinth link</a>
+    <select id="sel"><option>linger</option></select>
+    <label id="lab">ephemeral label <input type="checkbox"></label>
+    <svg id="svg" width="140" height="28"><text x="2" y="20">lantern</text></svg>
+    <noscript id="ns">lantern in noscript</noscript>
+    <p id="rolebtn" role="button">linger as a button role</p>
+  </div>
+
+  <script id="data" type="text/plain">linger in a script</script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    if (params.has('dark')) document.documentElement.classList.add('dark');
+    const many = Number(params.get('many')) || 0;
+    for (let i = 1; i <= many; i += 1) {
+      const p = document.createElement('p');
+      p.className = 'many';
+      p.textContent = `The lantern number ${i} glows.`;
+      document.body.append(p);
+    }
+    const late = Number(params.get('late')) || 0;
+    if (late > 0) {
+      const original = document.body.innerHTML;
+      document.body.innerHTML = '<p id="loading">Loading…</p>';
+      setTimeout(() => { document.body.innerHTML = original; }, late);
+    }
+  </script>
+</body>
+</html>

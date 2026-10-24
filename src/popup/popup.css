@@ -91,6 +91,15 @@ body {
   margin-top: 10px;
 }
 
+.row-immersion {
+  margin-top: 10px;
+}
+
+.row-action {
+  display: block;
+  margin-top: 4px;
+}
+
 .row-text {
   flex: 1;
   min-width: 0;
@@ -248,4 +257,13 @@ kbd {
 .link:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+.link:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.link:disabled:hover {
+  text-decoration: none;
 }
