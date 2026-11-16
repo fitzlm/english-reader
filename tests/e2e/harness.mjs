@@ -175,7 +175,7 @@ export async function installApiMock(context, { failGlossary = false, contextSta
   const state = { failGlossary, immersionItems, immersionStatus };
   // known：每次 /api/learner/known 请求的词列表；events：每次 POST /api/events 的请求体；immersion：/api/learner/immersion 请求次数
   const calls = { glossary: 0, translate: 0, guest: 0, context: 0, immersion: 0, contextItems: [], wordUpdates: [], known: [], events: [] };
-  await context.route('https://json-view.org/english/api/**', async (route) => {
+  await context.route('https://learnaify.com/english/api/**', async (route) => {
     const url = new URL(route.request().url());
     const json = (status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
     if (url.pathname.endsWith('/api/guest-token')) {

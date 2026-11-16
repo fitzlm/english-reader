@@ -129,7 +129,7 @@ npm run package                          # 打包 zip
 ```
 
 后端接口在 `english-learning-fastapi` 仓库：`app/services/glossary_service.py`、`app/routers/words.py`。
-服务器地址默认 `https://json-view.org/english`，可在设置页「高级设置」里改。
+服务器地址默认 `https://learnaify.com/english`，可在设置页「高级设置」里改。
 
 ## 点词翻译源
 

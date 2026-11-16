@@ -1,6 +1,6 @@
 // 设置：阅读偏好放 storage.sync（跟着 Chrome 账号走），账号与服务器地址放 storage.local。
 
-export const DEFAULT_API_BASE = 'https://json-view.org/english';
+export const DEFAULT_API_BASE = 'https://learnaify.com/english';
 
 export const DEFAULTS = Object.freeze({
   vocab: 3000,

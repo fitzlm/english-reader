@@ -111,7 +111,7 @@ test('正文任意词单击查义，短词、缩写和邻近空白有明确命�
 
 test('较慢的旧查询不能覆盖新点击的词卡', async ({ context, serviceWorker, server }) => {
   await installApiMock(context);
-  await context.route('https://json-view.org/english/api/translate', async (route) => {
+  await context.route('https://learnaify.com/english/api/translate', async (route) => {
     const word = route.request().postDataJSON().text;
     if (word === 'taipei') await new Promise((resolve) => setTimeout(resolve, 500));
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ translation: `${word} 的释义` }) });

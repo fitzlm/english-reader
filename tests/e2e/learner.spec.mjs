@@ -52,7 +52,7 @@ test('lp-learner-known：服务器回 413 时，该批对半拆开各重试一�
   const page = await openExtensionPage(context, extensionId);
   // 模拟一个更严的服务器：超过 3 个词就回 413（其余请求交给 installApiMock）
   const attempts = [];
-  await context.route('https://json-view.org/english/api/learner/known?**', (route) => {
+  await context.route('https://learnaify.com/english/api/learner/known?**', (route) => {
     const words = new URL(route.request().url()).searchParams.get('words').split(',');
     attempts.push(words.length);
     if (words.length > 3) return route.fulfill({ status: 413, contentType: 'application/json', body: '{"detail":"too many"}' });
@@ -70,7 +70,7 @@ test('lp-learner-known：服务器出错的词按 unknown 返回，不缓存，�
   const calls = await installApiMock(context);
   const page = await openExtensionPage(context, extensionId);
   // 让这一次 known 请求失败（只有这一条路由失败，其余 mock 不受影响）
-  await context.route('https://json-view.org/english/api/learner/known?**', (route) => route.fulfill({ status: 503, contentType: 'application/json', body: '{"detail":"down"}' }), { times: 1 });
+  await context.route('https://learnaify.com/english/api/learner/known?**', (route) => route.fulfill({ status: 503, contentType: 'application/json', body: '{"detail":"down"}' }), { times: 1 });
 
   expect(await known(page, ['benefit'])).toEqual({ states: { benefit: 'unknown' } });
   expect(calls.known).toHaveLength(0); // 失败的请求没走到 mock
@@ -120,7 +120,7 @@ test('lp-track：不合格的事件不入队；服务器拒绝时丢弃，不影
   expect(calls.events).toHaveLength(0);
   expect(calls.known).toHaveLength(0);
 
-  await context.route('https://json-view.org/english/api/events', (route) => route.fulfill({ status: 503, contentType: 'application/json', body: '{"detail":"down"}' }), { times: 1 });
+  await context.route('https://learnaify.com/english/api/events', (route) => route.fulfill({ status: 503, contentType: 'application/json', body: '{"detail":"down"}' }), { times: 1 });
   expect(await send(page, { type: 'lp-track', event: 'push.click', payload: { cloze_id: 'c1' } })).toEqual({ ok: true });
   expect(await send(page, { type: 'lp-track-flush' })).toEqual({ ok: true }); // 503：丢弃，照常应答
   expect(calls.events).toHaveLength(0);
@@ -215,7 +215,7 @@ test('换了登录身份清空缓存；游客 token 续期不清', async ({ cont
   await known(page, ['benefit']);
   expect(calls.known).toHaveLength(2);
 
-  await serviceWorker.evaluate(() => chrome.storage.local.set({ apiBase: 'https://json-view.org/english/' })); // 换服务器地址也清
+  await serviceWorker.evaluate(() => chrome.storage.local.set({ apiBase: 'https://learnaify.com/english/' })); // 换服务器地址也清
   await known(page, ['benefit']);
   expect(calls.known).toHaveLength(3);
 });

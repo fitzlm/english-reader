@@ -181,7 +181,7 @@ test('连续点两个词只留后一个；收起后的迟到响应不会重开',
   const { page } = await setup(fixtures);
   const card = page.locator(`${CARD} .card`);
   // 后注册的路由优先：aroma、labyrinth 的词库请求慢 1.2 秒，其余照常交给 mock
-  await context.route('https://json-view.org/english/api/words/glossary', async (route) => {
+  await context.route('https://learnaify.com/english/api/words/glossary', async (route) => {
     const { words } = route.request().postDataJSON();
     if (words.includes('aroma') || words.includes('labyrinth')) await new Promise((r) => setTimeout(r, 1200));
     await route.fallback();
